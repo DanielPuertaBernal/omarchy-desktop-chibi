@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "danso.chibi",
+  "name": "Desktop chibi",
+  "version": "1.0.0",
+  "author": "danso",
+  "description": "A chibi girl that roams the screen on her own: walks, runs, chases the cursor, waves, dances, sits and naps",
+  "kinds": ["service"],
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}

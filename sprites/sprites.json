@@ -1,0 +1,42 @@
+{
+  "idle": {
+    "frameWidth": 83,
+    "frameHeight": 132,
+    "frameCount": 6
+  },
+  "walk": {
+    "frameWidth": 109,
+    "frameHeight": 138,
+    "frameCount": 6
+  },
+  "dance": {
+    "frameWidth": 89,
+    "frameHeight": 135,
+    "frameCount": 6
+  },
+  "run": {
+    "frameWidth": 159,
+    "frameHeight": 117,
+    "frameCount": 7
+  },
+  "jump": {
+    "frameWidth": 110,
+    "frameHeight": 222,
+    "frameCount": 4
+  },
+  "sit": {
+    "frameWidth": 103,
+    "frameHeight": 109,
+    "frameCount": 2
+  },
+  "sleep": {
+    "frameWidth": 105,
+    "frameHeight": 96,
+    "frameCount": 1
+  },
+  "hang": {
+    "frameWidth": 110,
+    "frameHeight": 222,
+    "frameCount": 2
+  }
+}
