@@ -1,10 +1,6 @@
 # Desktop chibi for Omarchy
 
 <p align="center">
-  <img src="docs/preview.gif" alt="The chibi idling, walking, running, dancing, jumping, sitting, sleeping and hanging" width="200">
-</p>
-
-<p align="center">
   <img src="docs/poses.png" alt="All eight poses: idle, walk, run, dance, jump, sit, sleep and hang">
 </p>
 
