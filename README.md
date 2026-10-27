@@ -1,5 +1,13 @@
 # Desktop chibi for Omarchy
 
+<p align="center">
+  <img src="docs/preview.gif" alt="The chibi idling, walking, running, dancing, jumping, sitting, sleeping and hanging" width="200">
+</p>
+
+<p align="center">
+  <img src="docs/poses.png" alt="All eight poses: idle, walk, run, dance, jump, sit, sleep and hang">
+</p>
+
 A little chibi character that lives on your desktop. She roams across every
 screen on her own and picks what to do at random: walk, run, chase your
 cursor, dance, sit, jump, idle or take a nap. Grab her with the mouse and she
