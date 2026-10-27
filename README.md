@@ -13,18 +13,56 @@ screen on her own and picks what to do at random: walk, run, chase your
 cursor, dance, sit, jump, idle or take a nap. Grab her with the mouse and she
 dangles from your cursor; let go and she drops back down.
 
-It is an [Omarchy](https://omarchy.org) shell plugin (Quickshell / QML) and
-works with any character you want: swap the sprites and you have your own.
+It is built with [Quickshell](https://quickshell.org) (QML). It runs as an
+[Omarchy](https://omarchy.org) plugin or standalone on any distro, and works
+with any character you want: swap the sprites and you have your own.
+
+Everything else stays click-through: only her own box takes mouse input.
+
+## Requirements
+
+- A **Wayland** compositor with the layer-shell protocol: Hyprland, Sway,
+  KDE Plasma, niri, river, Wayfire... GNOME is **not** supported (no
+  layer-shell).
+- [Quickshell](https://quickshell.org/docs/master/guide/install-setup).
+- Chasing the cursor only works on **Hyprland** (it uses `hyprctl cursorpos`).
+  On other compositors she does everything else and simply never chases.
 
 ## Install
+
+### Omarchy
 
 ```sh
 omarchy plugin add https://github.com/DanielPuertaBernal/omarchy-desktop-chibi.git --enable
 ```
 
-Requirements: Omarchy with the plugin shell, on Hyprland (cursor chasing uses
-`hyprctl cursorpos`). Everything else is click-through: only her own box takes
-mouse input.
+### Any distro (standalone)
+
+1. Install Quickshell:
+
+   | Distro         | Command                                                                 |
+   |----------------|-------------------------------------------------------------------------|
+   | Arch and derivatives | `sudo pacman -S quickshell`                                       |
+   | Fedora         | `sudo dnf copr enable errornointernet/quickshell && sudo dnf install quickshell` |
+   | Debian testing / unstable | `sudo apt install quickshell`                                 |
+   | Others         | see the [Quickshell install guide](https://quickshell.org/docs/master/guide/install-setup) |
+
+2. Get the chibi and run her:
+
+   ```sh
+   git clone https://github.com/DanielPuertaBernal/omarchy-desktop-chibi.git ~/.local/share/desktop-chibi
+   quickshell -p ~/.local/share/desktop-chibi
+   ```
+
+3. Start her with your session:
+
+   - Hyprland (`~/.config/hypr/hyprland.conf`):
+     `exec-once = quickshell -p ~/.local/share/desktop-chibi`
+   - Sway (`~/.config/sway/config`):
+     `exec quickshell -p ~/.local/share/desktop-chibi`
+   - KDE Plasma and others: add the same command in your autostart settings.
+
+To stop her: `pkill -f desktop-chibi`.
 
 ## Tweak her
 
@@ -119,6 +157,8 @@ cp -r my-chibi ~/.config/omarchy/plugins/yourname.chibi
 omarchy plugin validate ~/.config/omarchy/plugins/yourname.chibi
 omarchy plugin enable yourname.chibi
 ```
+
+Standalone (no Omarchy): `quickshell -p my-chibi`.
 
 Publish your folder as a git repo and others can install your character with
 `omarchy plugin add <your-repo-url> --enable`. Pull requests that add new

@@ -46,6 +46,8 @@ Scope {
   property real targetY: 0
   property bool facingRight: true
   property bool caught: false // reached the cursor while chasing
+  // Chasing needs `hyprctl cursorpos`; other compositors don't expose the pointer.
+  property bool canChase: false
   property real lift: 0
   property real breath: 0
   property real swing: 0      // pendulum angle while held, in degrees
@@ -86,12 +88,14 @@ Scope {
   }
 
   function pickNext() {
+    const odds = Object.assign({}, weights)
+    if (!canChase) delete odds.chase
     let total = 0
-    for (const k in weights) total += weights[k]
+    for (const k in odds) total += odds[k]
     let r = Math.random() * total
     let next = "walk"
-    for (const k in weights) {
-      r -= weights[k]
+    for (const k in odds) {
+      r -= odds[k]
       if (r <= 0) { next = k; break }
     }
     caught = false
@@ -211,6 +215,15 @@ Scope {
     from: 0; to: Math.PI * 2; duration: 3000
     loops: Animation.Infinite
     running: root.mode === "sleep"
+  }
+
+  Process {
+    command: ["sh", "-c", "command -v hyprctl"]
+    running: true
+    onExited: function(exitCode) {
+      root.canChase = exitCode === 0
+      if (!root.canChase) console.info("chibi: hyprctl not found, cursor chasing disabled")
+    }
   }
 
   // Cursor position for chasing (global coordinates).
