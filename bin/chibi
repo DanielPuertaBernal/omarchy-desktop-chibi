@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Toggle the desktop chibi (Omarchy plugin danso.chibi).
+# Usage: chibi [on|off|toggle|status]   (default: toggle)
+set -euo pipefail
+
+ID="danso.chibi"
+
+is_enabled() {
+  omarchy plugin list | awk -v id="$ID" '$1 == id { print $2 }' | grep -qx enabled
+}
+
+case "${1:-toggle}" in
+  on) omarchy plugin enable "$ID" ;;
+  off) omarchy plugin disable "$ID" ;;
+  toggle)
+    if is_enabled; then omarchy plugin disable "$ID"; else omarchy plugin enable "$ID"; fi
+    ;;
+  status)
+    if is_enabled; then echo "on"; else echo "off"; fi
+    ;;
+  *)
+    echo "Usage: chibi [on|off|toggle|status]" >&2
+    exit 1
+    ;;
+esac

@@ -32,6 +32,17 @@ Everything else stays click-through: only her own box takes mouse input.
 omarchy plugin add https://github.com/DanielPuertaBernal/omarchy-desktop-chibi.git --enable
 ```
 
+Optional: a `chibi` command to turn her on and off from the terminal:
+
+```sh
+ln -s ~/.config/omarchy/plugins/danso.chibi/bin/chibi ~/.local/bin/chibi
+
+chibi          # toggle
+chibi on       # turn on
+chibi off      # turn off
+chibi status   # prints on / off
+```
+
 ### Any distro (standalone)
 
 1. Install Quickshell:
