@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
 # Toggle the desktop chibi (Omarchy plugin danso.chibi).
-# Usage: chibi [on|off|toggle|status]   (default: toggle)
+# Usage: chibi [on|off|toggle|status|sleep|wake]   (default: toggle)
+#   sleep  keep her asleep until `chibi wake`
+#   wake   let her roam again
 set -euo pipefail
 
 ID="danso.chibi"
+STATE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/danso-chibi/state"
+
+# The plugin watches this file (see stateFile in Service.qml).
+set_state() {
+  mkdir -p "$(dirname "$STATE")"
+  echo "$1" >"$STATE"
+}
 
 is_enabled() {
   omarchy plugin list | awk -v id="$ID" '$1 == id { print $2 }' | grep -qx enabled
@@ -18,8 +27,10 @@ case "${1:-toggle}" in
   status)
     if is_enabled; then echo "on"; else echo "off"; fi
     ;;
+  sleep) set_state sleep ;;
+  wake) set_state awake ;;
   *)
-    echo "Usage: chibi [on|off|toggle|status]" >&2
+    echo "Usage: chibi [on|off|toggle|status|sleep|wake]" >&2
     exit 1
     ;;
 esac

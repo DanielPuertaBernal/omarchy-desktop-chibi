@@ -41,6 +41,8 @@ chibi          # toggle
 chibi on       # turn on
 chibi off      # turn off
 chibi status   # prints on / off
+chibi sleep    # nap until woken
+chibi wake     # roam again
 ```
 
 ### Any distro (standalone)

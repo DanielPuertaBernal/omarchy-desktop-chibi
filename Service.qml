@@ -46,6 +46,8 @@ Scope {
   property real targetY: 0
   property bool facingRight: true
   property bool caught: false // reached the cursor while chasing
+  // Set by `chibi sleep` / `chibi wake` through stateFile: she naps until woken.
+  property bool sleepLocked: false
   // Chasing needs `hyprctl cursorpos`; other compositors don't expose the pointer.
   property bool canChase: false
   property real lift: 0
@@ -88,6 +90,12 @@ Scope {
   }
 
   function pickNext() {
+    if (sleepLocked) {
+      caught = false
+      mode = "sleep"
+      moodTimer.stop()
+      return
+    }
     const odds = Object.assign({}, weights)
     if (!canChase) delete odds.chase
     let total = 0
@@ -142,6 +150,31 @@ Scope {
     fallAnim.to = Math.max(gy, Math.min(floor, gy + 60))
     fallAnim.duration = Math.max(120, (fallAnim.to - gy) * 4)
     fallAnim.restart()
+  }
+
+  // `bin/chibi` writes "sleep" or "awake" here. A file instead of IPC because
+  // third-party services are created without a parent, so an IpcHandler in
+  // them never registers with the shell.
+  FileView {
+    id: stateFile
+    path: Quickshell.env("XDG_RUNTIME_DIR") + "/danso-chibi/state"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.setSleepLocked(text().trim() === "sleep")
+  }
+
+  function setSleepLocked(locked) {
+    if (locked === sleepLocked) return
+    sleepLocked = locked
+    if (mode === "held" || mode === "fall") return // drop() picks next
+    if (locked) {
+      jumpAnim.stop()
+      lift = 0
+      pickNext()
+    } else if (mode === "sleep") {
+      pickNext()
+    }
   }
 
   Timer {
@@ -262,6 +295,7 @@ Scope {
       exclusionMode: ExclusionMode.Ignore
       // Only her own box takes pointer input; everything else clicks through.
       mask: Region { item: girl }
+
 
       Item {
         id: stage
