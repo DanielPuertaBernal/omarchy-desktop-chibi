@@ -65,12 +65,18 @@ class Bridge(QObject):
             self._open_link(link)
 
     def _open_link(self, link: dict) -> None:
-        addresses = QHostInfo.fromName(str(link["peer"])).addresses()
+        # The socket is IPv4 only, so a hostname must resolve to IPv4 too.
+        addresses = [a for a in QHostInfo.fromName(str(link["peer"])).addresses()
+                     if a.protocol() == QHostAddress.NetworkLayerProtocol.IPv4Protocol]
         if not addresses:
-            print(f"chibi: cannot resolve peer {link['peer']}, link disabled", file=sys.stderr)
+            print(f"chibi: cannot resolve peer {link['peer']} to IPv4, link disabled", file=sys.stderr)
             return
         self._peer = addresses[0]
-        self._port = int(link.get("port", 47800))
+        try:
+            self._port = int(link.get("port", 47800))
+        except ValueError:
+            print("chibi: invalid port, link disabled", file=sys.stderr)
+            return
         self._side = "left" if link.get("side") == "left" else "right"
         self._primary = bool(link.get("primary", False))
         self._socket = QUdpSocket(self)

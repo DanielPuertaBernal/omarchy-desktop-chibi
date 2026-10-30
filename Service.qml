@@ -62,6 +62,7 @@ Scope {
   property bool started: false     // startup decided where she is
   property string peerSide: "left" // where the other PC sits, per Deskflow
   property bool primary: true      // keeps her if both instances claim her
+  property bool linkOn: false      // chibi-link found a config and is running
   property real peerSeenAt: 0
   property bool peerHasHer: false
   property bool visiting: false    // walking off towards the other PC
@@ -194,6 +195,7 @@ Scope {
     if (message.t === "config") {
       peerSide = message.side === "right" ? "right" : "left"
       primary = message.primary !== false
+      linkOn = true
       return
     }
     peerSeenAt = Date.now()
@@ -289,10 +291,11 @@ Scope {
     swingReset.restart()
   }
 
-  // A press released quickly without moving is a click: carry her.
+  // A press released quickly without moving is a click: carry her, but only
+  // with a link to cross; on her own a click just drops her as before.
   function release(px, py) {
     const still = Math.abs(px - grabStartX) < 6 && Math.abs(py - grabStartY) < 6
-    if (still && Date.now() - grabStartedAt < 300) {
+    if (linkOn && still && Date.now() - grabStartedAt < 300) {
       mode = "carried"
       return
     }
@@ -365,7 +368,7 @@ Scope {
   // Wait until screens are known and the twin had a chance to say she is
   // over there, then start on the first screen.
   Timer {
-    interval: 2500
+    interval: root.linkOn ? 2500 : 500
     running: true
     onTriggered: {
       if (root.started) return

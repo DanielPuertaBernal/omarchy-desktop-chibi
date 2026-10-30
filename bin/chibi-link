@@ -29,10 +29,14 @@ def main() -> int:
     except (OSError, ValueError, KeyError):
         return 0
 
-    port = int(config.get("port", 47800))
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("0.0.0.0", port))
+    try:
+        port = int(config.get("port", 47800))
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("0.0.0.0", port))
+    except (OSError, ValueError) as error:
+        print(f"chibi-link: link disabled: {error}", file=sys.stderr)
+        return 0
 
     def emit(message: dict) -> None:
         sys.stdout.write(json.dumps(message) + "\n")
@@ -43,8 +47,14 @@ def main() -> int:
     def forward_stdin() -> None:
         for line in sys.stdin:
             line = line.strip()
-            if line:
+            if not line:
+                continue
+            # A dropped network (suspend, Wi-Fi loss) must not kill this
+            # thread: pings resume once the route is back.
+            try:
                 sock.sendto(line.encode(), (peer, port))
+            except OSError:
+                pass
         # The shell went away; take the process down with it.
         os._exit(0)
 

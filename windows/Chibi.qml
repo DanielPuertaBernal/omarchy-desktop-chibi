@@ -302,10 +302,11 @@ Window {
     swingReset.restart()
   }
 
-  // A press released quickly without moving is a click: carry her.
+  // A press released quickly without moving is a click: carry her, but only
+  // with a link to cross; on her own a click just drops her.
   function release(px, py) {
     const still = Math.abs(px - grabStartX) < 6 && Math.abs(py - grabStartY) < 6
-    if (still && Date.now() - grabStartedAt < 300) {
+    if (bridge.linkEnabled && still && Date.now() - grabStartedAt < 300) {
       mode = "carried"
       return
     }
