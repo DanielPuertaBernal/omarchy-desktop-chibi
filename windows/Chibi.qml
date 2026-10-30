@@ -364,6 +364,8 @@ Window {
   // Dragged onto the shared edge: Deskflow keeps the pointer on this PC while
   // the button is held, so she goes ahead and waits for it on the other one.
   function dragMove(px, py) {
+    // The press outlives her hand-off; later moves must not send her again.
+    if (mode !== "held") return
     if (linkUp() && atEdge(px)) {
       swing = 0
       handOff("carry")
