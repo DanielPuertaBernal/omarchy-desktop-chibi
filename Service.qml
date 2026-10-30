@@ -246,7 +246,8 @@ Scope {
       mode = next
       targetX = peerSide === "left" ? s.x - w - 10 : s.x + s.width + 10
       targetY = s.y + topMargin + Math.random() * Math.max(1, s.height - h - margin - topMargin)
-      moodTimer.interval = 30000
+      // Time enough to reach the edge from the far screen, plus slack.
+      moodTimer.interval = Math.abs(targetX - gx) / speed * 1000 + 10000
       moodTimer.restart()
       return
     }
