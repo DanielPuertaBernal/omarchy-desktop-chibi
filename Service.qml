@@ -28,6 +28,8 @@ Scope {
   readonly property int topMargin: 60   // stay below the bar
   // Relative odds for each activity.
   readonly property var weights: ({ walk: 6, run: 3, chase: 2, idle: 5, dance: 2, sit: 2, jump: 2, sleep: 1 })
+  // With the other PC linked, share of walks and runs that cross to it.
+  readonly property real visitChance: 0.4
 
   // Frame geometry from sprites/sprites.json, plus playback speed per strip.
   // `sideways` strips are drawn facing right and get mirrored to go left.
@@ -143,7 +145,7 @@ Scope {
   function handOff(kind) {
     const s = edgeScreen()
     const yr = s ? Math.max(0, Math.min(1, (gy - s.y) / s.height)) : 0.5
-    send({ t: "enter", mode: kind, yr: yr })
+    send({ t: "enter", mode: kind, gait: mode, yr: yr })
     moodTimer.stop()
     jumpAnim.stop()
     fallAnim.stop()
@@ -172,7 +174,7 @@ Scope {
       moodTimer.stop()
       if (canChase && !cursorProc.running) cursorProc.running = true
     } else {
-      mode = "walk"
+      mode = message.gait === "run" ? "run" : "walk"
       targetX = peerSide === "left" ? s.x + margin + Math.random() * 300
                                     : s.x + s.width - w - margin - Math.random() * 300
       targetY = gy
@@ -228,7 +230,6 @@ Scope {
     }
     const odds = Object.assign({}, weights)
     if (!canChase) delete odds.chase
-    if (linkUp()) odds.visit = 1
     let total = 0
     for (const k in odds) total += odds[k]
     let r = Math.random() * total
@@ -238,11 +239,11 @@ Scope {
       if (r <= 0) { next = k; break }
     }
     caught = false
-    if (next === "visit") {
-      // Walk off the shared edge; the move timer hands her over there.
+    if ((next === "walk" || next === "run") && linkUp() && Math.random() < visitChance) {
+      // Head off the shared edge; the move loop hands her over there.
       const s = edgeScreen()
       visiting = true
-      mode = "walk"
+      mode = next
       targetX = peerSide === "left" ? s.x - w - 10 : s.x + s.width + 10
       targetY = s.y + topMargin + Math.random() * Math.max(1, s.height - h - margin - topMargin)
       moodTimer.interval = 30000
@@ -421,15 +422,15 @@ Scope {
     onTriggered: root.pickNext()
   }
 
-  Timer {
-    interval: 33
-    repeat: true
+  // Steps once per rendered frame, sized by the frame time, so she glides
+  // at the display's refresh rate. A stalled frame is capped so she never jumps.
+  FrameAnimation {
     running: root.moving
     onTriggered: {
       const dx = root.targetX - root.gx
       const dy = root.targetY - root.gy
       const dist = Math.sqrt(dx * dx + dy * dy)
-      const step = root.speed * interval / 1000
+      const step = root.speed * Math.min(frameTime, 0.1)
       if (Math.abs(dx) > 2) root.facingRight = dx > 0
       root.caught = root.mode === "chase" && dist < 8
       if (dist <= step) {

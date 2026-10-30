@@ -97,8 +97,8 @@ folder (`Win + R`, then `shell:startup`).
 
 If you share one mouse between a Linux and a Windows PC with
 [Deskflow](https://github.com/deskflow/deskflow), both copies can share a
-single chibi over the local network: now and then she walks off the shared
-edge and appears on the other PC, and you can carry her across.
+single chibi over the local network: she walks or runs off the shared edge
+and on into the other PC on her own, and you can carry her across.
 
 - **Carry her:** click her once (no drag) and she hangs from the cursor; move
   to the other PC as usual and click again to drop her. Press-and-drag still
@@ -138,6 +138,7 @@ Edit the `Tweakables` block at the top of `Service.qml`:
 | `walkSpeed`, `runSpeed`, `chaseSpeed` | Speeds in px per second     |
 | `margin`, `topMargin` | Distance kept from screen edges / the bar   |
 | `weights`    | Relative odds of each activity                       |
+| `visitChance` | Share of walks and runs that cross to the linked PC |
 
 ## Make your own character
 
