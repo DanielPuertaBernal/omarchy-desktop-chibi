@@ -137,9 +137,25 @@ Scope {
     return best
   }
 
+  // Pointer speed towards the shared edge, in px per ms, smoothed.
+  property real edgeLastX: 0
+  property real edgeLastAt: 0
+  property real edgeSpeed: 0
+
   function atEdge(px) {
     const s = edgeScreen()
-    return s && (peerSide === "left" ? px <= s.x + 1 : px >= s.x + s.width - 2)
+    if (!s) return false
+    const now = Date.now()
+    const dt = now - edgeLastAt
+    const toward = peerSide === "left" ? edgeLastX - px : px - edgeLastX
+    edgeSpeed = dt > 0 && dt < 200 ? edgeSpeed * 0.5 + toward / dt * 0.5 : 0
+    edgeLastX = px
+    edgeLastAt = now
+    // A fast pointer reaches the edge between two samples and Deskflow takes
+    // it away before the last one, so the edge widens with the speed towards
+    // it: about 80 ms ahead, from 2 px when still up to 150 px.
+    const zone = Math.max(2, Math.min(150, edgeSpeed * 80))
+    return peerSide === "left" ? px <= s.x + zone : px >= s.x + s.width - 1 - zone
   }
 
   function send(message) {
