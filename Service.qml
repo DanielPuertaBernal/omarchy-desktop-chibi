@@ -69,6 +69,7 @@ Scope {
   property bool peerHasHer: false
   property bool visiting: false    // walking off towards the other PC
   property bool awaitingAck: false
+  property bool carryArmed: true  // carried her far enough from the edge to hand her back
   property real handedAt: 0        // when she last left for the other PC
 
   // A function, not a binding: it has to see the clock move.
@@ -170,6 +171,9 @@ Scope {
     gx = peerSide === "left" ? s.x - w : s.x + s.width
     facingRight = peerSide === "left"
     if (message.mode === "carry") {
+      // The pointer arrives on the edge itself: wait until it moves away
+      // before the edge can send her back, or she bounces between PCs.
+      carryArmed = false
       mode = "carried"
       moodTimer.stop()
       if (canChase && !cursorProc.running) cursorProc.running = true
@@ -298,6 +302,7 @@ Scope {
   function release(px, py) {
     const still = Math.abs(px - grabStartX) < 6 && Math.abs(py - grabStartY) < 6
     if (linkOn && still && Date.now() - grabStartedAt < 300) {
+      carryArmed = true
       mode = "carried"
       return
     }
@@ -306,7 +311,9 @@ Scope {
 
   function carryMove(px, py) {
     if (mode !== "carried") return
-    if (linkUp() && atEdge(px)) {
+    const s = edgeScreen()
+    if (!carryArmed && s && (peerSide === "left" ? px > s.x + 40 : px < s.x + s.width - 40)) carryArmed = true
+    if (carryArmed && linkUp() && atEdge(px)) {
       handOff("carry")
       return
     }

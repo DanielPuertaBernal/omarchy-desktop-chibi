@@ -64,6 +64,7 @@ Window {
   property bool peerHasHer: false
   property bool visiting: false  // walking off towards the other PC
   property bool awaitingAck: false
+  property bool carryArmed: true  // carried her far enough from the edge to hand her back
   property real handedAt: 0      // when she last left for the other PC
   property real swing: 0      // pendulum angle while held, in degrees
   Behavior on swing { SpringAnimation { spring: 2.5; damping: 0.12 } }
@@ -182,6 +183,9 @@ Window {
     gx = peerSide === "left" ? s.x - w : s.x + s.width
     facingRight = peerSide === "left"
     if (message.mode === "carry") {
+      // The pointer arrives on the edge itself: wait until it moves away
+      // before the edge can send her back, or she bounces between PCs.
+      carryArmed = false
       mode = "carried"
       moodTimer.stop()
     } else {
@@ -309,6 +313,7 @@ Window {
   function release(px, py) {
     const still = Math.abs(px - grabStartX) < 6 && Math.abs(py - grabStartY) < 6
     if (bridge.linkEnabled && still && Date.now() - grabStartedAt < 300) {
+      carryArmed = true
       mode = "carried"
       return
     }
@@ -317,7 +322,9 @@ Window {
 
   function carryMove(px, py) {
     if (mode !== "carried") return
-    if (linkUp() && atEdge(px)) {
+    const s = edgeScreen()
+    if (!carryArmed && s && (peerSide === "left" ? px > s.x + 40 : px < s.x + s.width - 40)) carryArmed = true
+    if (carryArmed && linkUp() && atEdge(px)) {
       handOff("carry")
       return
     }
