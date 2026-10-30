@@ -73,6 +73,61 @@ chibi wake     # roam again
 
 To stop her: `pkill -f desktop-chibi`.
 
+### Windows
+
+The `windows/` folder runs the same behaviour on Windows with Qt Quick
+(PySide6): a small frameless, always-on-top window follows her around and
+only takes the mouse while the pointer is over her. A tray icon puts her to
+sleep, wakes her up or quits.
+
+Build a standalone `chibi.exe` (needs [Python](https://www.python.org/downloads/windows/) 3.10+):
+
+```powershell
+cd windows
+.\build.ps1
+.\dist\chibi.exe
+```
+
+Or run it without building: `pip install PySide6`, then `python chibi.py`.
+
+To start her with Windows, put a shortcut to `chibi.exe` in the Startup
+folder (`Win + R`, then `shell:startup`).
+
+### One chibi across two PCs (Deskflow)
+
+If you share one mouse between a Linux and a Windows PC with
+[Deskflow](https://github.com/deskflow/deskflow), both copies can share a
+single chibi over the local network: now and then she walks off the shared
+edge and appears on the other PC, and you can carry her across.
+
+- **Carry her:** click her once (no drag) and she hangs from the cursor; move
+  to the other PC as usual and click again to drop her. Press-and-drag still
+  works, but only within one PC: Deskflow does not switch screens while a
+  mouse button is held.
+- Only one copy shows her at a time. If the other PC goes away, she comes
+  back on her own.
+
+Configure each side with the other PC's address and where it sits, matching
+your Deskflow layout. The Linux side is the `primary` (it keeps her if both
+start at once).
+
+Linux, `~/.config/danso-chibi/link.json` (the Windows PC is on the left):
+
+```json
+{ "peer": "192.168.1.20", "port": 47800, "side": "left", "primary": true }
+```
+
+Windows, `link.json` next to `chibi.exe` (see `windows/link.example.json`):
+
+```json
+{ "peer": "192.168.1.10", "port": 47800, "side": "right", "primary": false }
+```
+
+Allow UDP port 47800 between the two PCs: on Linux with ufw,
+`sudo ufw allow from <windows-ip> to any port 47800 proto udp`; on Windows,
+accept the firewall prompt the first time `chibi.exe` starts (private
+networks).
+
 ## Tweak her
 
 Edit the `Tweakables` block at the top of `Service.qml`:
