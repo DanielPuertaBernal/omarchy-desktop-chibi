@@ -101,9 +101,10 @@ single chibi over the local network: she walks or runs off the shared edge
 and on into the other PC on her own, and you can carry her across.
 
 - **Carry her:** click her once (no drag) and she hangs from the cursor; move
-  to the other PC as usual and click again to drop her. Press-and-drag still
-  works, but only within one PC: Deskflow does not switch screens while a
-  mouse button is held.
+  to the other PC as usual and click again to drop her.
+- **Or drag her:** drag her onto the shared edge and she jumps to the other PC
+  and hangs there; let go and move the pointer across (Deskflow does not
+  switch screens while a button is held), and she follows it.
 - Only one copy shows her at a time. If the other PC goes away, she comes
   back on her own.
 

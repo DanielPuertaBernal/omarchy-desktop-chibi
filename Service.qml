@@ -69,6 +69,9 @@ Scope {
   property bool peerHasHer: false
   property bool visiting: false    // walking off towards the other PC
   property bool awaitingAck: false
+  property bool carryWaiting: false // just arrived carried: waits for this PC's pointer
+  property real carryFromX: NaN
+  property real carryFromY: NaN
   property bool carryArmed: true  // carried her far enough from the edge to hand her back
   property real handedAt: 0        // when she last left for the other PC
 
@@ -174,6 +177,9 @@ Scope {
       // The pointer arrives on the edge itself: wait until it moves away
       // before the edge can send her back, or she bounces between PCs.
       carryArmed = false
+      carryWaiting = true
+      carryFromX = NaN
+      gx = peerSide === "left" ? s.x : s.x + s.width - w
       mode = "carried"
       moodTimer.stop()
       if (canChase && !cursorProc.running) cursorProc.running = true
@@ -300,6 +306,7 @@ Scope {
   // A press released quickly without moving is a click: carry her, but only
   // with a link to cross; on her own a click just drops her as before.
   function release(px, py) {
+    if (mode !== "held") return
     const still = Math.abs(px - grabStartX) < 6 && Math.abs(py - grabStartY) < 6
     if (linkOn && still && Date.now() - grabStartedAt < 300) {
       carryArmed = true
@@ -311,9 +318,27 @@ Scope {
 
   function carryMove(px, py) {
     if (mode !== "carried") return
+    // Arrived from the other PC: stay put until this PC's pointer moves, as
+    // it may still sit elsewhere while Deskflow switches screens.
+    if (carryWaiting) {
+      if (isNaN(carryFromX)) { carryFromX = px; carryFromY = py; return }
+      if (Math.abs(px - carryFromX) + Math.abs(py - carryFromY) < 3) return
+      carryWaiting = false
+    }
     const s = edgeScreen()
     if (!carryArmed && s && (peerSide === "left" ? px > s.x + 40 : px < s.x + s.width - 40)) carryArmed = true
     if (carryArmed && linkUp() && atEdge(px)) {
+      handOff("carry")
+      return
+    }
+    grabMove(px, py)
+  }
+
+  // Dragged onto the shared edge: Deskflow keeps the pointer on this PC while
+  // the button is held, so she goes ahead and waits for it on the other one.
+  function dragMove(px, py) {
+    if (linkUp() && atEdge(px)) {
+      swing = 0
       handOff("carry")
       return
     }
@@ -553,7 +578,7 @@ Scope {
               return { x: p.x + panel.modelData.x, y: p.y + panel.modelData.y }
             }
             onPressed: function(mouse) { const g = globalPos(mouse); root.grabStart(g.x, g.y) }
-            onPositionChanged: function(mouse) { if (pressed) { const g = globalPos(mouse); root.grabMove(g.x, g.y) } }
+            onPositionChanged: function(mouse) { if (pressed) { const g = globalPos(mouse); root.dragMove(g.x, g.y) } }
             onReleased: function(mouse) { const g = globalPos(mouse); root.release(g.x, g.y) }
           }
 
