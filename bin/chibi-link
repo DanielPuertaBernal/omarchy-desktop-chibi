@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""UDP link between this chibi and her twin on another PC.
+
+Service.qml runs this and talks to it through stdin/stdout, one JSON message
+per line: lines read from stdin are sent to the peer, and datagrams from the
+peer are printed. The first printed line is {"t": "config", ...} so the plugin
+learns which side the peer is on and whether this instance is the primary.
+
+Config: ~/.config/danso-chibi/link.json
+  {"peer": "172.16.11.86", "port": 47800, "side": "left", "primary": true}
+side: where the peer PC sits relative to this one (as arranged in Deskflow).
+Without a config file the link is off and this exits at once.
+"""
+
+import json
+import os
+import socket
+import sys
+import threading
+from pathlib import Path
+
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "danso-chibi" / "link.json"
+
+
+def main() -> int:
+    try:
+        config = json.loads(CONFIG.read_text())
+        peer = socket.gethostbyname(config["peer"])
+    except (OSError, ValueError, KeyError):
+        return 0
+
+    port = int(config.get("port", 47800))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("0.0.0.0", port))
+
+    def emit(message: dict) -> None:
+        sys.stdout.write(json.dumps(message) + "\n")
+        sys.stdout.flush()
+
+    emit({"t": "config", "side": config.get("side", "left"), "primary": bool(config.get("primary", True))})
+
+    def forward_stdin() -> None:
+        for line in sys.stdin:
+            line = line.strip()
+            if line:
+                sock.sendto(line.encode(), (peer, port))
+        # The shell went away; take the process down with it.
+        os._exit(0)
+
+    threading.Thread(target=forward_stdin, daemon=True).start()
+
+    while True:
+        data, (host, _) = sock.recvfrom(4096)
+        if host != peer:
+            continue
+        try:
+            emit(json.loads(data))
+        except ValueError:
+            continue
+
+
+if __name__ == "__main__":
+    sys.exit(main())
