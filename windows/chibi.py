@@ -19,7 +19,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QPointF, QUrl, Signal, Slot, Property
 from PySide6.QtGui import QAction, QCursor, QIcon, QPixmap
-from PySide6.QtNetwork import QHostAddress, QHostInfo, QUdpSocket
+from PySide6.QtNetwork import QAbstractSocket, QHostAddress, QHostInfo, QUdpSocket
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -67,7 +67,7 @@ class Bridge(QObject):
     def _open_link(self, link: dict) -> None:
         # The socket is IPv4 only, so a hostname must resolve to IPv4 too.
         addresses = [a for a in QHostInfo.fromName(str(link["peer"])).addresses()
-                     if a.protocol() == QHostAddress.NetworkLayerProtocol.IPv4Protocol]
+                     if a.protocol() == QAbstractSocket.NetworkLayerProtocol.IPv4Protocol]
         if not addresses:
             print(f"chibi: cannot resolve peer {link['peer']} to IPv4, link disabled", file=sys.stderr)
             return
