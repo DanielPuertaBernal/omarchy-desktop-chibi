@@ -190,8 +190,8 @@ Scope {
     gx = peerSide === "left" ? s.x - w : s.x + s.width
     facingRight = peerSide === "left"
     if (message.mode === "carry") {
-      // The pointer arrives on the edge itself: wait until it moves away
-      // before the edge can send her back, or she bounces between PCs.
+      // The pointer arrives on the edge itself: wait until it clears the widest
+      // edge zone before the edge can send her back, or she bounces between PCs.
       carryArmed = false
       carryWaiting = true
       carryFromX = NaN
@@ -342,7 +342,7 @@ Scope {
       carryWaiting = false
     }
     const s = edgeScreen()
-    if (!carryArmed && s && (peerSide === "left" ? px > s.x + 40 : px < s.x + s.width - 40)) carryArmed = true
+    if (!carryArmed && s && (peerSide === "left" ? px > s.x + 160 : px < s.x + s.width - 160)) carryArmed = true
     if (carryArmed && linkUp() && atEdge(px)) {
       handOff("carry")
       return
