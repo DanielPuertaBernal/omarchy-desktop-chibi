@@ -8,6 +8,12 @@ import Quickshell.Wayland
 // jump, idle) at random. She can be picked up and dragged with the mouse.
 // State lives in global desktop coordinates; each screen has a click-through
 // overlay that draws her whenever she overlaps it. Sprite strips: sprites/.
+//
+// With bin/chibi-link configured she shares one life with her twin on another
+// PC (see windows/): she walks off the edge towards it now and then, and a
+// single click picks her up so she can be carried across with the mouse
+// (Deskflow does not switch screens while a button is held, so press-and-drag
+// stays on this PC). Only the instance where she is `present` draws her.
 Scope {
   id: root
 
@@ -46,8 +52,34 @@ Scope {
   property real targetY: 0
   property bool facingRight: true
   property bool caught: false // reached the cursor while chasing
+  // Set by `chibi sleep` / `chibi wake` through stateFile: she naps until woken.
+  property bool sleepLocked: false
   // Chasing needs `hyprctl cursorpos`; other compositors don't expose the pointer.
   property bool canChase: false
+
+  // ---- Link with the twin on the other PC (bin/chibi-link) ----
+  property bool present: false     // she is on this PC
+  property bool started: false     // startup decided where she is
+  property string peerSide: "left" // where the other PC sits, per Deskflow
+  property bool primary: true      // keeps her if both instances claim her
+  property bool linkOn: false      // chibi-link found a config and is running
+  property real peerSeenAt: 0
+  property bool peerHasHer: false
+  property bool visiting: false    // walking off towards the other PC
+  property bool awaitingAck: false
+  property real handedAt: 0        // when she last left for the other PC
+
+  // A function, not a binding: it has to see the clock move.
+  function linkUp() {
+    return peerSeenAt > 0 && Date.now() - peerSeenAt < 6000
+  }
+
+  // Nobody has her (the other PC quit or went silent): the primary takes her
+  // back. Skipped right after a hand-off, while pings from before it arrive.
+  function reclaimIfLost() {
+    if (present || !started || awaitingAck || Date.now() - handedAt < 5000) return
+    if (!linkUp() || (!peerHasHer && primary)) comeBack()
+  }
   property real lift: 0
   property real breath: 0
   property real swing: 0      // pendulum angle while held, in degrees
@@ -57,7 +89,8 @@ Scope {
                                : mode === "run" ? runSpeed : walkSpeed
   readonly property bool moving: mode === "walk" || mode === "run" || mode === "chase"
   readonly property string anim: mode === "chase" ? (caught ? "dance" : "run")
-                               : mode === "held" || mode === "fall" ? "hang"
+                               : mode === "held" || mode === "fall" || mode === "carried" ? "hang"
+                               : mode === "away" ? "idle"
                                : mode
 
   function screenAt(x, y) {
@@ -87,9 +120,115 @@ Scope {
     targetY = Math.max(s.y, Math.min(s.y + s.height - h, py + 10))
   }
 
+  // ---- Edge shared with the other PC ----
+  function edgeScreen() {
+    const screens = Quickshell.screens
+    let best = null
+    for (let i = 0; i < screens.length; i++) {
+      const s = screens[i]
+      if (!best || (peerSide === "left" ? s.x < best.x : s.x + s.width > best.x + best.width)) best = s
+    }
+    return best
+  }
+
+  function atEdge(px) {
+    const s = edgeScreen()
+    return s && (peerSide === "left" ? px <= s.x + 1 : px >= s.x + s.width - 2)
+  }
+
+  function send(message) {
+    if (linkProc.running) linkProc.write(JSON.stringify(message) + "\n")
+  }
+
+  function handOff(kind) {
+    const s = edgeScreen()
+    const yr = s ? Math.max(0, Math.min(1, (gy - s.y) / s.height)) : 0.5
+    send({ t: "enter", mode: kind, yr: yr })
+    moodTimer.stop()
+    jumpAnim.stop()
+    fallAnim.stop()
+    visiting = false
+    present = false
+    mode = "away"
+    awaitingAck = true
+    handedAt = Date.now()
+    ackTimer.restart()
+  }
+
+  // She arrives from the other PC, just outside the shared edge.
+  function arrive(message) {
+    const s = edgeScreen()
+    if (!s) return
+    present = true
+    started = true
+    visiting = false
+    lift = 0
+    const yr = Number(message.yr) || 0.5
+    gy = Math.max(s.y + topMargin, Math.min(s.y + s.height - h - margin, s.y + yr * s.height))
+    gx = peerSide === "left" ? s.x - w : s.x + s.width
+    facingRight = peerSide === "left"
+    if (message.mode === "carry") {
+      mode = "carried"
+      moodTimer.stop()
+      if (canChase && !cursorProc.running) cursorProc.running = true
+    } else {
+      mode = "walk"
+      targetX = peerSide === "left" ? s.x + margin + Math.random() * 300
+                                    : s.x + s.width - w - margin - Math.random() * 300
+      targetY = gy
+      moodTimer.interval = 30000
+      moodTimer.restart()
+    }
+  }
+
+  // Back on this side of the edge when the other PC never took her.
+  function comeBack() {
+    const s = edgeScreen()
+    if (!s) return
+    present = true
+    gx = peerSide === "left" ? s.x + margin : s.x + s.width - w - margin
+    gy = Math.max(s.y + topMargin, Math.min(s.y + s.height - h - margin, gy))
+    pickNext()
+  }
+
+  function handleMessage(message) {
+    if (message.t === "config") {
+      peerSide = message.side === "right" ? "right" : "left"
+      primary = message.primary !== false
+      linkOn = true
+      return
+    }
+    peerSeenAt = Date.now()
+    if (message.t === "ping") {
+      peerHasHer = message.has === true
+      // Both claim her (started together): the secondary lets go.
+      if (peerHasHer && present && !primary && mode !== "held" && mode !== "carried") {
+        present = false
+        mode = "away"
+        moodTimer.stop()
+      }
+      reclaimIfLost()
+    } else if (message.t === "enter") {
+      if (present) return // no ack: the sender keeps her
+      send({ t: "ack" })
+      arrive(message)
+    } else if (message.t === "ack") {
+      awaitingAck = false
+      ackTimer.stop()
+    }
+  }
+
   function pickNext() {
+    if (!present) return
+    if (sleepLocked) {
+      caught = false
+      mode = "sleep"
+      moodTimer.stop()
+      return
+    }
     const odds = Object.assign({}, weights)
     if (!canChase) delete odds.chase
+    if (linkUp()) odds.visit = 1
     let total = 0
     for (const k in odds) total += odds[k]
     let r = Math.random() * total
@@ -99,6 +238,18 @@ Scope {
       if (r <= 0) { next = k; break }
     }
     caught = false
+    if (next === "visit") {
+      // Walk off the shared edge; the move timer hands her over there.
+      const s = edgeScreen()
+      visiting = true
+      mode = "walk"
+      targetX = peerSide === "left" ? s.x - w - 10 : s.x + s.width + 10
+      targetY = s.y + topMargin + Math.random() * Math.max(1, s.height - h - margin - topMargin)
+      moodTimer.interval = 30000
+      moodTimer.restart()
+      return
+    }
+    visiting = false
     mode = next
     if (moving && mode !== "chase") randomPoint()
     if (mode === "jump") jumpAnim.restart()
@@ -114,8 +265,14 @@ Scope {
 
   // ---- Grabbing (global pointer coordinates) ----
   property real lastGrabX: 0
+  property real grabStartX: 0
+  property real grabStartY: 0
+  property real grabStartedAt: 0
 
   function grabStart(px, py) {
+    grabStartX = px
+    grabStartY = py
+    grabStartedAt = Date.now()
     moodTimer.stop()
     jumpAnim.stop()
     fallAnim.stop()
@@ -134,6 +291,26 @@ Scope {
     swingReset.restart()
   }
 
+  // A press released quickly without moving is a click: carry her, but only
+  // with a link to cross; on her own a click just drops her as before.
+  function release(px, py) {
+    const still = Math.abs(px - grabStartX) < 6 && Math.abs(py - grabStartY) < 6
+    if (linkOn && still && Date.now() - grabStartedAt < 300) {
+      mode = "carried"
+      return
+    }
+    drop()
+  }
+
+  function carryMove(px, py) {
+    if (mode !== "carried") return
+    if (linkUp() && atEdge(px)) {
+      handOff("carry")
+      return
+    }
+    grabMove(px, py)
+  }
+
   function drop() {
     swing = 0
     mode = "fall"
@@ -142,6 +319,31 @@ Scope {
     fallAnim.to = Math.max(gy, Math.min(floor, gy + 60))
     fallAnim.duration = Math.max(120, (fallAnim.to - gy) * 4)
     fallAnim.restart()
+  }
+
+  // `bin/chibi` writes "sleep" or "awake" here. A file instead of IPC because
+  // third-party services are created without a parent, so an IpcHandler in
+  // them never registers with the shell.
+  FileView {
+    id: stateFile
+    path: Quickshell.env("XDG_RUNTIME_DIR") + "/danso-chibi/state"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.setSleepLocked(text().trim() === "sleep")
+  }
+
+  function setSleepLocked(locked) {
+    if (locked === sleepLocked) return
+    sleepLocked = locked
+    if (!present || mode === "held" || mode === "fall" || mode === "carried") return // drop() picks next
+    if (locked) {
+      jumpAnim.stop()
+      lift = 0
+      pickNext()
+    } else if (mode === "sleep") {
+      pickNext()
+    }
   }
 
   Timer {
@@ -163,18 +365,55 @@ Scope {
   }
 
   // ---- Behaviour clock ----
-  // Wait until screens are known, then start on the first one.
+  // Wait until screens are known and the twin had a chance to say she is
+  // over there, then start on the first screen.
   Timer {
-    interval: 500
+    interval: root.linkOn ? 2500 : 500
     running: true
     onTriggered: {
+      if (root.started) return
+      root.started = true
+      if (root.peerHasHer) { root.mode = "away"; return }
       const s = Quickshell.screens[0]
       if (s) {
         root.gx = s.x + s.width / 2
         root.gy = s.y + s.height - root.h - root.margin
       }
+      root.present = true
       root.pickNext()
     }
+  }
+
+  Process {
+    id: linkProc
+    command: ["python3", String(Qt.resolvedUrl("bin/chibi-link")).replace("file://", "")]
+    running: true
+    stdinEnabled: true
+    stdout: SplitParser {
+      onRead: function(line) {
+        let message = null
+        try { message = JSON.parse(line) } catch (e) { return }
+        root.handleMessage(message)
+      }
+    }
+  }
+
+  Timer {
+    interval: 2000
+    repeat: true
+    running: linkProc.running
+    onTriggered: {
+      // In transit she still counts as ours, so the peer never reclaims her
+      // between our hand-off and its ack.
+      root.send({ t: "ping", has: root.present || root.awaitingAck })
+      root.reclaimIfLost()
+    }
+  }
+
+  Timer {
+    id: ackTimer
+    interval: 1500
+    onTriggered: if (root.awaitingAck) { root.awaitingAck = false; root.comeBack() }
   }
 
   Timer {
@@ -196,7 +435,8 @@ Scope {
       if (dist <= step) {
         root.gx = root.targetX
         root.gy = root.targetY
-        if (root.mode !== "chase") root.pickNext()
+        if (root.visiting) root.handOff("walk")
+        else if (root.mode !== "chase") root.pickNext()
         return
       }
       root.gx += dx / dist * step
@@ -233,7 +473,9 @@ Scope {
     stdout: SplitParser {
       onRead: function(line) {
         const parts = line.split(",").map(v => Number(v.trim()))
-        if (parts.length === 2 && !isNaN(parts[0])) root.chaseTo(parts[0], parts[1])
+        if (parts.length !== 2 || isNaN(parts[0])) return
+        if (root.mode === "carried") root.carryMove(parts[0], parts[1])
+        else root.chaseTo(parts[0], parts[1])
       }
     }
   }
@@ -261,11 +503,25 @@ Scope {
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
       exclusionMode: ExclusionMode.Ignore
       // Only her own box takes pointer input; everything else clicks through.
-      mask: Region { item: girl }
+      // While carried the whole overlay takes it, to follow the pointer and
+      // catch the click that drops her.
+      mask: Region { item: root.mode === "carried" ? stage : girl }
+
 
       Item {
         id: stage
         anchors.fill: parent
+
+        MouseArea {
+          anchors.fill: parent
+          enabled: root.mode === "carried"
+          hoverEnabled: true
+          cursorShape: Qt.ClosedHandCursor
+          onPositionChanged: function(mouse) {
+            root.carryMove(mouse.x + panel.modelData.x, mouse.y + panel.modelData.y)
+          }
+          onClicked: root.drop()
+        }
 
         Item {
           id: girl
@@ -278,6 +534,7 @@ Scope {
 
           MouseArea {
             anchors.fill: parent
+            enabled: root.present && root.mode !== "carried"
             hoverEnabled: true
             cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
             // The pointer stays grabbed by this surface while pressed, even
@@ -288,12 +545,12 @@ Scope {
             }
             onPressed: function(mouse) { const g = globalPos(mouse); root.grabStart(g.x, g.y) }
             onPositionChanged: function(mouse) { if (pressed) { const g = globalPos(mouse); root.grabMove(g.x, g.y) } }
-            onReleased: root.drop()
+            onReleased: function(mouse) { const g = globalPos(mouse); root.release(g.x, g.y) }
           }
 
           AnimatedSprite {
             id: sprite
-            visible: girl.onThisScreen
+            visible: girl.onThisScreen && root.present
             readonly property var a: root.anims[root.anim] || root.anims.idle
             source: Qt.resolvedUrl("sprites/" + root.anim + ".png")
             frameWidth: a.frameWidth
