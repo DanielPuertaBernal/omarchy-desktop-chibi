@@ -6,7 +6,28 @@ A character is a folder with one PNG strip per animation plus a
 ```json
 { "character": "characters/kumo" }   // default: new full-body character (placeholder art)
 { "character": "sprites" }           // the original chibi
+{ "character": "ellen" }             // ~/.config/danso-chibi/characters/ellen
 ```
+
+### Your own characters (kept outside the repo)
+
+Put personal characters, and any art you may not publish, in
+`~/.config/danso-chibi/characters/<name>/` and set `"character": "<name>"`.
+A bare name is looked up there first, then in the repo; an absolute path
+(or `~/...`) also works. An unknown name falls back to `characters/kumo`.
+
+```
+~/.config/danso-chibi/characters/<name>/
+  sprites.json          required (format below)
+  idle.png, walk.png... the strips
+  personality.json      optional: her own name, tone, lines (overrides personality.json)
+```
+
+The repo's `.gitignore` ignores every folder in `characters/` except
+`kumo`, so a character copied into the repo by mistake is not committed.
+
+To switch characters, change `character` in
+`~/.config/danso-chibi/personality.json` and restart the plugin.
 
 ## Strip format
 
@@ -69,6 +90,12 @@ character with just the original eight strips still plays every state.
 - `_meta.scale`: default on-screen scale for this character.
 - `frameMs` (ms per frame) and `sideways` (mirrored to go left) are optional;
   defaults exist for the classic names.
+- `motion` (optional) adds procedural movement to strips with few frames:
+  `breathe` (slow bob and breathing), `bounce` (small hops, e.g. celebrate),
+  `sway` (rocks from the feet, e.g. wave). It ticks every 50 ms only while
+  such a strip is showing.
+- To make a 2-frame blink look natural, repeat the open-eyes frame in the
+  strip (e.g. 7 open + 1 closed at 400 ms) instead of slowing the clock.
 - Keys starting with `_` are ignored.
 
 ## Placeholders

@@ -64,6 +64,41 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(chat["gemini"], {"model": chat["gemini"]["model"], "apiKeyEnv": "GEMINI_API_KEY"})  # key only from env
 
 
+class CharacterTest(unittest.TestCase):
+    def make_char(self, base: Path, name: str, preset=None) -> Path:
+        d = base / name
+        d.mkdir(parents=True)
+        (d / "sprites.json").write_text('{"idle": {"frameWidth": 1, "frameHeight": 1, "frameCount": 1}}')
+        if preset is not None:
+            (d / "personality.json").write_text(json.dumps(preset))
+        return d
+
+    def test_user_character_dir_wins_and_preset_merges(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            defaults, user = Path(tmp) / "defaults", Path(tmp) / "user"
+            defaults.mkdir()
+            (defaults / "personality.json").write_text(json.dumps(PERSONA))
+            user.mkdir()
+            (user / "personality.json").write_text('{"character": "ellen"}')
+            ellen = self.make_char(user / "characters", "ellen", {"name": "Ellen", "tone": "perezosa"})
+            persona = brain.load_persona(defaults, user, root=Path(tmp) / "repo")
+        self.assertEqual(persona["character"], str(ellen))
+        self.assertEqual(persona["name"], "Ellen")
+        self.assertEqual(persona["tone"], "perezosa")
+        self.assertEqual(persona["likes"], ["el té"])  # untouched keys keep the defaults
+
+    def test_repo_relative_and_missing_characters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, user = Path(tmp) / "repo", Path(tmp) / "user"
+            kumo = self.make_char(repo / "characters", "kumo")
+            sprites = self.make_char(repo, "sprites")
+            self.assertEqual(brain.resolve_character("sprites", repo, user), sprites)
+            self.assertEqual(brain.resolve_character("characters/kumo", repo, user), kumo)
+            self.assertEqual(brain.resolve_character("kumo", repo, user), kumo)
+            self.assertEqual(brain.resolve_character(str(sprites), repo, user), sprites)
+            self.assertEqual(brain.resolve_character("nobody", repo, user), kumo)
+
+
 class PromptTest(unittest.TestCase):
     def test_system_prompt_uses_personality(self):
         prompt = brain.system_prompt(PERSONA)

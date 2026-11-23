@@ -40,7 +40,13 @@ Scope {
   readonly property var weights: ({ walk: 6, run: 3, chase: 2, idle: 5, dance: 2, sit: 2, jump: 2, sleep: 1, climb: 1, peek: 1 })
 
   // ---- Character (loaded from <character>/sprites.json) ----
+  // Repo-relative ("characters/kumo") or absolute (a user character in
+  // ~/.config/danso-chibi/characters/<name>, resolved by chibi-brain).
   property string charDir: "characters/kumo"
+  function charUrl(file) {
+    const p = charDir + "/" + file
+    return p[0] === "/" ? "file://" + p : Qt.resolvedUrl(p)
+  }
   property var anims: ({})
   property bool animsReady: false
   property real sizeScale: 1
@@ -75,7 +81,9 @@ Scope {
       result[k] = {
         frameWidth: a.frameWidth, frameHeight: a.frameHeight, frameCount: a.frameCount,
         frameMs: a.frameMs || defaultFrameMs[k] || 160,
-        sideways: a.sideways !== undefined ? a.sideways : (k === "walk" || k === "run" || k === "climb")
+        sideways: a.sideways !== undefined ? a.sideways : (k === "walk" || k === "run" || k === "climb"),
+        // Procedural motion for strips with few frames: breathe | bounce | sway
+        motion: a.motion || ""
       }
     }
     anims = result
@@ -88,7 +96,7 @@ Scope {
 
   FileView {
     id: charFile
-    path: Qt.resolvedUrl(root.charDir + "/sprites.json")
+    path: root.charUrl("sprites.json")
     printErrors: true
     onLoaded: root.loadCharacter(text())
   }
@@ -170,6 +178,9 @@ Scope {
   }
   property real lift: 0
   property real breath: 0
+  // Current strip's procedural motion (sprites.json `motion`), and its phase.
+  readonly property string motion: (anims[anim] && anims[anim].motion) || ""
+  property real motionT: 0
   property real swing: 0      // pendulum angle while held, in degrees
   Behavior on swing { SpringAnimation { spring: 2.5; damping: 0.12 } }
 
@@ -916,6 +927,14 @@ Scope {
     onTriggered: root.breath = (root.breath + Math.PI * 2 / 15) % (Math.PI * 2)
   }
 
+  // Procedural motion: one 50 ms tick while a strip asks for it, idle otherwise.
+  Timer {
+    interval: 50
+    repeat: true
+    running: root.motion !== "" && root.present && !root.busyHands
+    onTriggered: root.motionT = (root.motionT + 0.05) % 1000
+  }
+
   // Confetti when an agent finishes.
   property real confettiT: 1
   NumberAnimation {
@@ -1089,7 +1108,7 @@ Scope {
             id: sprite
             visible: girl.onThisScreen && root.present && root.animsReady
             readonly property var a: root.anims[root.anim] || { frameWidth: 1, frameHeight: 1, frameCount: 1, frameMs: 1000, sideways: false }
-            source: root.animsReady ? Qt.resolvedUrl(root.charDir + "/" + root.anim + ".png") : ""
+            source: root.animsReady ? root.charUrl(root.anim + ".png") : ""
             frameWidth: a.frameWidth
             frameHeight: a.frameHeight
             frameCount: a.frameCount
@@ -1102,14 +1121,23 @@ Scope {
             width: a.frameWidth * root.sizeScale
             height: a.frameHeight * root.sizeScale
             x: (root.w - width) / 2
-            y: root.h - height - root.lift
+            // bounce: small hops; breathe: a slow bob of a pixel or two.
+            readonly property real hop: root.motion === "bounce" ? 10 * Math.abs(Math.sin(root.motionT * Math.PI * 2.2))
+                                      : root.motion === "breathe" ? 1.5 * (1 + Math.sin(root.motionT * 2.4)) : 0
+            y: root.h - height - root.lift - hop * root.sizeScale
             onSourceChanged: restart()
             transform: [
               Scale {
                 origin.x: sprite.width / 2
                 origin.y: sprite.height
                 xScale: sprite.a.sideways && !root.facingRight ? -1 : 1
-                yScale: root.mode === "sleep" ? 1 + 0.015 * Math.sin(root.breath) : 1
+                yScale: root.mode === "sleep" ? 1 + 0.015 * Math.sin(root.breath)
+                      : root.motion === "breathe" ? 1 + 0.008 * Math.sin(root.motionT * 2.4) : 1
+              },
+              // sway: rocks from her feet (waving).
+              Rotation {
+                origin.x: sprite.width / 2; origin.y: sprite.height
+                angle: root.motion === "sway" ? 3 * Math.sin(root.motionT * 6) : 0
               },
               // Swings from her hands while held.
               Rotation { origin.x: sprite.width / 2; origin.y: 0; angle: root.swing }

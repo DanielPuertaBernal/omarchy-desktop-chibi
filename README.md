@@ -192,6 +192,12 @@ stays the same. The full animation set, sizes and fallbacks are in
 [docs/sprites.md](docs/sprites.md); the steps below still work for a
 character with the original eight strips.
 
+Keep your own characters outside the repo, in
+`~/.config/danso-chibi/characters/<name>/` (strips, `sprites.json` and an
+optional `personality.json` with her own name and lines), then set
+`"character": "<name>"` in `~/.config/danso-chibi/personality.json`.
+Folders in the repo's `characters/` other than `kumo` are git-ignored.
+
 ### 1. Make the sprites
 
 Each animation is **one PNG file with all frames side by side in a single

@@ -66,7 +66,7 @@ plugin to apply.
 | Key | What it does |
 |---|---|
 | `name` | her name |
-| `character` | sprite folder: `characters/kumo` (default) or `sprites` (original chibi) |
+| `character` | sprite folder: `characters/kumo` (default), `sprites` (original chibi), or the name of a folder in `~/.config/danso-chibi/characters/` (see [sprites.md](sprites.md)); that folder's own `personality.json`, if any, is applied on top |
 | `scale` | on-screen size multiplier; `0` uses the character's own (`1` for kumo) |
 | `language` | reply language (`es` default) |
 | `tone`, `likes`, `backstory`, `catchphrases` | go into her system prompt |

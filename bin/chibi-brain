@@ -25,6 +25,8 @@ another origin without a CORS preflight, which is never answered).
 
 Config (repo defaults in config/, user overrides win):
   ~/.config/danso-chibi/personality.json   name, tone, likes, catchphrases...
+  ~/.config/danso-chibi/characters/<name>/ your own characters (sprites.json,
+                                           strips, optional personality.json)
   ~/.config/danso-chibi/chat.json          backend (ollama|gemini), model, memory
 Secrets are read from the environment only (chat.json names the variable).
 """
@@ -70,6 +72,42 @@ def load_config(name: str, defaults_dir: Path = ROOT / "config", user_dir: Path 
         except (OSError, ValueError) as error:
             print(f"chibi-brain: ignoring {path}: {error}", file=sys.stderr)
     return config
+
+
+DEFAULT_CHARACTER = "characters/kumo"
+
+
+def resolve_character(value, root: Path = ROOT, user_dir: Path = CONFIG_HOME) -> Path:
+    """Find a character folder (one with sprites.json).
+
+    A bare name looks in <user config>/characters/<name> first (art you keep
+    outside the repo), then in the repo; paths may also be absolute or ~/...
+    Unknown names fall back to the default character.
+    """
+    path = Path(str(value or DEFAULT_CHARACTER)).expanduser()
+    if path.is_absolute():
+        candidates = [path]
+    else:
+        candidates = [user_dir / "characters" / path, root / path, root / "characters" / path]
+    for candidate in candidates:
+        if (candidate / "sprites.json").is_file():
+            return candidate
+    print(f"chibi-brain: character {value!r} not found, using {DEFAULT_CHARACTER}", file=sys.stderr)
+    return root / DEFAULT_CHARACTER
+
+
+def load_persona(defaults_dir: Path = ROOT / "config", user_dir: Path = CONFIG_HOME, root: Path = ROOT) -> dict:
+    """personality.json, plus the active character's own personality.json on top."""
+    persona = load_config("personality.json", defaults_dir, user_dir)
+    char_dir = resolve_character(persona.get("character"), root, user_dir)
+    preset = char_dir / "personality.json"
+    if preset.is_file():
+        try:
+            persona = merge(persona, json.loads(preset.read_text()))
+        except (OSError, ValueError) as error:
+            print(f"chibi-brain: ignoring {preset}: {error}", file=sys.stderr)
+    persona["character"] = str(char_dir)
+    return persona
 
 
 def is_spanish(persona: dict) -> bool:
@@ -362,7 +400,7 @@ class Brain:
             "idleChatter": bool(p.get("idleChatter", True)),
             "idleChatterMinSec": int(p.get("idleChatterMinSec", 180)),
             "backend": self.chat_cfg.get("backend", "ollama"),
-            "character": str(p.get("character", "characters/kumo")),
+            "character": str(p.get("character", DEFAULT_CHARACTER)),
             "scale": float(p.get("scale", 0) or 0),
         }
 
@@ -458,7 +496,7 @@ def make_handler(brain: Brain):
 
 
 def main() -> int:
-    persona = load_config("personality.json")
+    persona = load_persona()
     chat = load_config("chat.json")
     out_lock = threading.Lock()
 
