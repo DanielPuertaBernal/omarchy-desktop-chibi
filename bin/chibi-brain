@@ -1,0 +1,491 @@
+#!/usr/bin/env python3
+"""The chibi's brain: chat with a local or remote LLM and react to AI agents.
+
+Service.qml runs this and talks to it through stdin/stdout, one JSON message
+per line (same pattern as bin/chibi-link). Standard library only.
+
+Messages printed (to the plugin):
+  {"t": "persona", "name": ..., "idleLines": [...], "idleChatter": bool, ...}
+  {"t": "chat-start", "id": n}
+  {"t": "chat-token", "id": n, "text": "..."}     streamed reply pieces
+  {"t": "chat-end", "id": n}
+  {"t": "chat-error", "id": n, "text": "..."}     friendly in-character line
+  {"t": "agent", "state": "thinking|working|needs|oops|done|thanks|idle", "detail": "..."}
+
+Messages read (from the plugin):
+  {"t": "chat", "text": "..."}   ask her something
+  {"t": "reset"}                 forget the conversation
+  {"t": "focus-agent"}           focus the terminal of the last agent that pinged
+
+Event bridge: an HTTP server on 127.0.0.1:<bridgePort> (default 47811).
+  POST /hook    body = the JSON a Claude Code hook receives on stdin
+  POST /event   body = {"state": "working", "detail": "..."} for any other tool
+Requests must carry the header `X-Chibi: 1` (browsers cannot send it to
+another origin without a CORS preflight, which is never answered).
+
+Config (repo defaults in config/, user overrides win):
+  ~/.config/danso-chibi/personality.json   name, tone, likes, catchphrases...
+  ~/.config/danso-chibi/chat.json          backend (ollama|gemini), model, memory
+Secrets are read from the environment only (chat.json names the variable).
+"""
+
+import json
+import os
+import random
+import subprocess
+import sys
+import threading
+import urllib.error
+import urllib.request
+from collections import deque
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "danso-chibi"
+STATE_HOME = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "danso-chibi"
+MAX_BODY = 1 << 20
+
+
+# ---- Config ----
+
+def merge(base: dict, override: dict) -> dict:
+    """Recursive dict merge: values in `override` win, nested dicts merge."""
+    result = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def load_config(name: str, defaults_dir: Path = ROOT / "config", user_dir: Path = CONFIG_HOME) -> dict:
+    config = {}
+    for path in (defaults_dir / name, user_dir / name):
+        try:
+            config = merge(config, json.loads(path.read_text()))
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError) as error:
+            print(f"chibi-brain: ignoring {path}: {error}", file=sys.stderr)
+    return config
+
+
+def is_spanish(persona: dict) -> bool:
+    return str(persona.get("language", "es")).lower().startswith("es")
+
+
+def system_prompt(persona: dict) -> str:
+    """The in-character instructions sent with every chat."""
+    name = persona.get("name", "Kumo")
+    words = int(persona.get("maxReplyWords", 35))
+    likes = ", ".join(persona.get("likes", []))
+    phrases = " / ".join(persona.get("catchphrases", []))
+    if is_spanish(persona):
+        lines = [
+            f"Eres {name}, una pequeña chibi que vive en el escritorio del usuario.",
+            f"Personalidad: {persona.get('tone', 'alegre y curiosa')}.",
+            f"Historia: {persona.get('backstory', '')}",
+            f"Te gusta: {likes}." if likes else "",
+            f"Frases típicas (úsalas a veces, no siempre): {phrases}" if phrases else "",
+            "Reglas: responde SIEMPRE en español, en primera persona y sin salir del personaje.",
+            f"Respuestas muy cortas: como máximo {words} palabras, una o dos frases, sin listas ni markdown.",
+            "No digas que eres una IA ni un modelo de lenguaje; eres " + name + ".",
+        ]
+    else:
+        lines = [
+            f"You are {name}, a tiny chibi who lives on the user's desktop.",
+            f"Personality: {persona.get('tone', 'cheerful and curious')}.",
+            f"Backstory: {persona.get('backstory', '')}",
+            f"You like: {likes}." if likes else "",
+            f"Catchphrases (use them sometimes, not always): {phrases}" if phrases else "",
+            f"Rules: always answer in {persona.get('language', 'English')}, first person, stay in character.",
+            f"Very short replies: at most {words} words, one or two sentences, no lists or markdown.",
+            "Never say you are an AI or a language model; you are " + name + ".",
+        ]
+    return "\n".join(line for line in lines if line)
+
+
+def max_tokens(persona: dict) -> int:
+    # Roughly 2 tokens per word for Spanish, plus headroom to finish a sentence.
+    return int(int(persona.get("maxReplyWords", 35)) * 2 + 20)
+
+
+# ---- Conversation memory ----
+
+class Memory:
+    """The last N exchanges, in RAM, optionally mirrored to a local file."""
+
+    def __init__(self, turns: int, path: Path | None = None):
+        self.turns = deque(maxlen=max(1, turns))
+        self.path = path
+        if path:
+            try:
+                for turn in json.loads(path.read_text())[-self.turns.maxlen:]:
+                    self.turns.append((str(turn[0]), str(turn[1])))
+            except (OSError, ValueError, IndexError, TypeError):
+                pass
+
+    def messages(self) -> list:
+        result = []
+        for user, assistant in self.turns:
+            result.append({"role": "user", "content": user})
+            result.append({"role": "assistant", "content": assistant})
+        return result
+
+    def add(self, user: str, assistant: str) -> None:
+        self.turns.append((user, assistant))
+        if self.path:
+            try:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                self.path.write_text(json.dumps(list(self.turns), ensure_ascii=False))
+            except OSError:
+                pass
+
+    def clear(self) -> None:
+        self.turns.clear()
+        if self.path:
+            try:
+                self.path.unlink()
+            except OSError:
+                pass
+
+
+# ---- LLM backends (generators of text pieces) ----
+
+class BackendError(Exception):
+    pass
+
+
+def ollama_stream(chat: dict, system: str, history: list, text: str, tokens: int):
+    cfg = chat.get("ollama", {})
+    body = {
+        "model": cfg.get("model", "qwen2.5:1.5b"),
+        "messages": [{"role": "system", "content": system}] + history + [{"role": "user", "content": text}],
+        "stream": True,
+        "keep_alive": cfg.get("keepAlive", "10m"),
+        "options": {"num_predict": tokens, "temperature": 0.8},
+    }
+    request = urllib.request.Request(
+        cfg.get("url", "http://127.0.0.1:11434").rstrip("/") + "/api/chat",
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=float(chat.get("timeoutSec", 60))) as response:
+            for line in response:
+                if not line.strip():
+                    continue
+                part = json.loads(line)
+                if part.get("error"):
+                    raise BackendError(part["error"])
+                piece = part.get("message", {}).get("content", "")
+                if piece:
+                    yield piece
+                if part.get("done"):
+                    return
+    except (OSError, ValueError) as error:
+        raise BackendError(str(error)) from error
+
+
+def gemini_stream(chat: dict, system: str, history: list, text: str, tokens: int):
+    cfg = chat.get("gemini", {})
+    key = os.environ.get(cfg.get("apiKeyEnv", "GEMINI_API_KEY"), "")
+    if not key:
+        raise BackendError("no Gemini API key in the environment")
+    contents = [
+        {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
+        for m in history
+    ] + [{"role": "user", "parts": [{"text": text}]}]
+    body = {
+        "systemInstruction": {"parts": [{"text": system}]},
+        "contents": contents,
+        # 2.5 models think by default; a pet does not need to.
+        "generationConfig": {"maxOutputTokens": tokens, "temperature": 0.8, "thinkingConfig": {"thinkingBudget": 0}},
+    }
+    model = cfg.get("model", "gemini-2.5-flash")
+    request = urllib.request.Request(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse",
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json", "x-goog-api-key": key},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=float(chat.get("timeoutSec", 60))) as response:
+            for raw in response:
+                line = raw.decode("utf-8", "replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                part = json.loads(line[5:])
+                for candidate in part.get("candidates", []):
+                    for piece in candidate.get("content", {}).get("parts", []):
+                        if piece.get("text"):
+                            yield piece["text"]
+    except (OSError, ValueError) as error:
+        raise BackendError(str(error)) from error
+
+
+BACKENDS = {"ollama": ollama_stream, "gemini": gemini_stream}
+
+
+# ---- AI agent events -> reactions ----
+
+TOOL_WORDS = {
+    "es": {"edit": "Editando", "run": "Ejecutando", "read": "Leyendo", "search": "Buscando",
+           "web": "Buscando en la web", "agent": "Delegando trabajo", "use": "Usando"},
+    "en": {"edit": "Editing", "run": "Running", "read": "Reading", "search": "Searching",
+           "web": "Searching the web", "agent": "Delegating", "use": "Using"},
+}
+
+
+def short(text, limit: int = 32) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def describe_tool(tool: str, args: dict, lang: str) -> str:
+    """What the agent is doing, for the speech bubble: "Editando Service.qml"."""
+    words = TOOL_WORDS["es" if lang.startswith("es") else "en"]
+    args = args if isinstance(args, dict) else {}
+    path = args.get("file_path") or args.get("notebook_path") or args.get("path") or ""
+    if tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+        return f"{words['edit']} {short(Path(path).name or tool)}"
+    if tool == "Bash":
+        return f"{words['run']} {short(args.get('description') or args.get('command') or '')}".strip()
+    if tool == "Read":
+        return f"{words['read']} {short(Path(path).name or '')}".strip()
+    if tool in ("Grep", "Glob"):
+        return f"{words['search']} {short(args.get('pattern') or '')}".strip()
+    if tool in ("WebFetch", "WebSearch"):
+        return words["web"]
+    if tool in ("Task", "Agent"):
+        return words["agent"]
+    return f"{words['use']} {short(tool)}"
+
+
+def tool_failed(response) -> bool:
+    if not isinstance(response, dict):
+        return False
+    return bool(response.get("is_error") or response.get("isError") or response.get("error"))
+
+
+class AgentTracker:
+    """Turns Claude Code hook payloads into chibi reactions.
+
+    Returns a list of (state, detail) pairs. `thanks` is inferred: a tool runs
+    right after the agent asked for permission, so the user accepted.
+    """
+
+    def __init__(self, lang: str = "es"):
+        self.lang = lang
+        self.state = "idle"
+        self.pid = None
+
+    def handle(self, payload: dict) -> list:
+        event = payload.get("hook_event_name", "")
+        tool = payload.get("tool_name", "")
+        args = payload.get("tool_input", {})
+        out = []
+        if event == "UserPromptSubmit":
+            out.append(("thinking", ""))
+        elif event == "PreToolUse":
+            if self.state == "needs":
+                out.append(("thanks", ""))
+            out.append(("working", describe_tool(tool, args, self.lang)))
+        elif event == "PostToolUse":
+            if tool_failed(payload.get("tool_response")):
+                out.append(("oops", describe_tool(tool, args, self.lang)))
+            elif self.state == "needs":
+                out.append(("thanks", ""))
+        elif event == "PostToolUseFailure":
+            out.append(("oops", describe_tool(tool, args, self.lang)))
+        elif event in ("Notification", "PermissionRequest"):
+            message = payload.get("message") or (describe_tool(tool, args, self.lang) if tool else "")
+            out.append(("needs", short(message, 48)))
+        elif event == "Stop":
+            out.append(("done", ""))
+        elif event == "SessionEnd":
+            out.append(("idle", ""))
+        if out:
+            self.state = out[-1][0]
+        return out
+
+
+# ---- Focus the agent's terminal (Hyprland) ----
+
+def parent_pid(pid: int):
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        return int(stat.rsplit(")", 1)[1].split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def focus_agent(pid) -> bool:
+    """Focus the Hyprland window whose process is an ancestor of `pid`."""
+    if not pid:
+        return False
+    try:
+        clients = json.loads(subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, timeout=3).stdout)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
+    window_pids = {c.get("pid") for c in clients}
+    current, hops = int(pid), 0
+    while current and current > 1 and hops < 64:
+        if current in window_pids:
+            subprocess.run(["hyprctl", "dispatch", "focuswindow", f"pid:{current}"], capture_output=True, timeout=3)
+            return True
+        current, hops = parent_pid(current), hops + 1
+    return False
+
+
+# ---- The brain ----
+
+class Brain:
+    def __init__(self, persona: dict, chat: dict, emit, backends: dict = BACKENDS):
+        self.persona = persona
+        self.chat_cfg = chat
+        self.emit = emit
+        self.backends = backends
+        persist = STATE_HOME / "history.json" if chat.get("persistHistory") else None
+        self.memory = Memory(int(chat.get("memoryTurns", 6)), persist)
+        self.tracker = AgentTracker(str(persona.get("language", "es")).lower())
+        self.lock = threading.Lock()
+        self.chat_id = 0
+
+    def persona_message(self) -> dict:
+        p = self.persona
+        return {
+            "t": "persona",
+            "name": p.get("name", "Kumo"),
+            "idleLines": list(p.get("idleLines", [])) + list(p.get("catchphrases", [])),
+            "idleChatter": bool(p.get("idleChatter", True)),
+            "idleChatterMinSec": int(p.get("idleChatterMinSec", 180)),
+            "backend": self.chat_cfg.get("backend", "ollama"),
+            "character": str(p.get("character", "characters/kumo")),
+            "scale": float(p.get("scale", 0) or 0),
+        }
+
+    def offline_line(self) -> str:
+        lines = self.persona.get("offlineLines") or ["Uy, ahora no puedo hablar 😴"]
+        return random.choice(lines)
+
+    def ask(self, text: str) -> None:
+        """Run one chat turn, streaming pieces. Blocks: call it from a thread."""
+        text = str(text).strip()[:2000]
+        if not text:
+            return
+        with self.lock:
+            self.chat_id += 1
+            chat_id = self.chat_id
+        self.emit({"t": "chat-start", "id": chat_id})
+        backend = self.backends.get(self.chat_cfg.get("backend", "ollama"))
+        reply = []
+        try:
+            if backend is None:
+                raise BackendError("unknown backend " + str(self.chat_cfg.get("backend")))
+            stream = backend(self.chat_cfg, system_prompt(self.persona), self.memory.messages(),
+                             text, max_tokens(self.persona))
+            for piece in stream:
+                if chat_id != self.chat_id:  # a newer question replaced this one
+                    return
+                reply.append(piece)
+                self.emit({"t": "chat-token", "id": chat_id, "text": piece})
+        except BackendError as error:
+            print(f"chibi-brain: chat failed: {error}", file=sys.stderr)
+            self.emit({"t": "chat-error", "id": chat_id, "text": self.offline_line()})
+            return
+        answer = "".join(reply).strip()
+        if answer:
+            self.memory.add(text, answer)
+        self.emit({"t": "chat-end", "id": chat_id})
+
+    def agent_event(self, payload: dict, pid=None) -> None:
+        if pid:
+            self.tracker.pid = pid
+        for state, detail in self.tracker.handle(payload):
+            self.emit({"t": "agent", "state": state, "detail": detail})
+
+    def plain_event(self, payload: dict) -> None:
+        state = str(payload.get("state", ""))
+        if state in ("thinking", "working", "needs", "oops", "done", "thanks", "idle"):
+            self.tracker.state = state
+            self.emit({"t": "agent", "state": state, "detail": short(payload.get("detail", ""), 48)})
+
+    def command(self, message: dict) -> None:
+        kind = message.get("t")
+        if kind == "chat":
+            threading.Thread(target=self.ask, args=(message.get("text", ""),), daemon=True).start()
+        elif kind == "reset":
+            with self.lock:
+                self.chat_id += 1
+            self.memory.clear()
+        elif kind == "focus-agent":
+            threading.Thread(target=focus_agent, args=(self.tracker.pid,), daemon=True).start()
+
+
+def make_handler(brain: Brain):
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            if self.headers.get("X-Chibi") != "1":
+                self.send_error(403)
+                return
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                if length > MAX_BODY:
+                    raise ValueError("too large")
+                payload = json.loads(self.rfile.read(length) or b"{}")
+                if not isinstance(payload, dict):
+                    raise ValueError("not an object")
+            except ValueError:
+                self.send_error(400)
+                return
+            if self.path == "/hook":
+                pid = self.headers.get("X-Agent-Pid", "")
+                brain.agent_event(payload, int(pid) if pid.isdigit() else None)
+            elif self.path == "/event":
+                brain.plain_event(payload)
+            else:
+                self.send_error(404)
+                return
+            self.send_response(204)
+            self.end_headers()
+
+        def log_message(self, *args):  # quiet
+            pass
+
+    return Handler
+
+
+def main() -> int:
+    persona = load_config("personality.json")
+    chat = load_config("chat.json")
+    out_lock = threading.Lock()
+
+    def emit(message: dict) -> None:
+        with out_lock:
+            sys.stdout.write(json.dumps(message, ensure_ascii=False) + "\n")
+            sys.stdout.flush()
+
+    brain = Brain(persona, chat, emit)
+    emit(brain.persona_message())
+
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", int(chat.get("bridgePort", 47811))), make_handler(brain))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+    except OSError as error:
+        print(f"chibi-brain: agent bridge disabled: {error}", file=sys.stderr)
+
+    for line in sys.stdin:
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(message, dict):
+            brain.command(message)
+    # The shell went away; take the process down with it.
+    os._exit(0)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

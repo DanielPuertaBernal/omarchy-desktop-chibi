@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "curl -s -m 1 -H 'X-Chibi: 1' -H \"X-Agent-Pid: $PPID\" --data-binary @- http://127.0.0.1:47811/hook >/dev/null 2>&1 || true" }] }
+    ],
+    "PreToolUse": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "curl -s -m 1 -H 'X-Chibi: 1' -H \"X-Agent-Pid: $PPID\" --data-binary @- http://127.0.0.1:47811/hook >/dev/null 2>&1 || true" }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "curl -s -m 1 -H 'X-Chibi: 1' -H \"X-Agent-Pid: $PPID\" --data-binary @- http://127.0.0.1:47811/hook >/dev/null 2>&1 || true" }] }
+    ],
+    "PostToolUseFailure": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "curl -s -m 1 -H 'X-Chibi: 1' -H \"X-Agent-Pid: $PPID\" --data-binary @- http://127.0.0.1:47811/hook >/dev/null 2>&1 || true" }] }
+    ],
+    "Notification": [
+      { "hooks": [{ "type": "command", "command": "curl -s -m 1 -H 'X-Chibi: 1' -H \"X-Agent-Pid: $PPID\" --data-binary @- http://127.0.0.1:47811/hook >/dev/null 2>&1 || true" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "curl -s -m 1 -H 'X-Chibi: 1' -H \"X-Agent-Pid: $PPID\" --data-binary @- http://127.0.0.1:47811/hook >/dev/null 2>&1 || true" }] }
+    ]
+  }
+}

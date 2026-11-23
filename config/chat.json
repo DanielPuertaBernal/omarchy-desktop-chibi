@@ -1,0 +1,16 @@
+{
+  "backend": "ollama",
+  "ollama": {
+    "url": "http://127.0.0.1:11434",
+    "model": "qwen2.5:1.5b",
+    "keepAlive": "10m"
+  },
+  "gemini": {
+    "model": "gemini-2.5-flash",
+    "apiKeyEnv": "GEMINI_API_KEY"
+  },
+  "memoryTurns": 6,
+  "persistHistory": false,
+  "timeoutSec": 60,
+  "bridgePort": 47811
+}
