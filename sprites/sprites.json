@@ -1,42 +1,65 @@
 {
+  "_meta": {
+    "box": [
+      90,
+      135
+    ],
+    "scale": 0.8
+  },
   "idle": {
     "frameWidth": 83,
     "frameHeight": 132,
-    "frameCount": 6
+    "frameCount": 6,
+    "frameMs": 240,
+    "sideways": false
   },
   "walk": {
     "frameWidth": 109,
     "frameHeight": 138,
-    "frameCount": 6
+    "frameCount": 6,
+    "frameMs": 140,
+    "sideways": true
   },
   "dance": {
     "frameWidth": 89,
     "frameHeight": 135,
-    "frameCount": 6
+    "frameCount": 6,
+    "frameMs": 170,
+    "sideways": false
   },
   "run": {
     "frameWidth": 159,
     "frameHeight": 117,
-    "frameCount": 7
+    "frameCount": 7,
+    "frameMs": 80,
+    "sideways": true
   },
   "jump": {
     "frameWidth": 110,
     "frameHeight": 222,
-    "frameCount": 4
+    "frameCount": 4,
+    "frameMs": 260,
+    "sideways": false
   },
   "sit": {
     "frameWidth": 103,
     "frameHeight": 109,
-    "frameCount": 2
+    "frameCount": 2,
+    "frameMs": 900,
+    "sideways": false
   },
   "sleep": {
     "frameWidth": 105,
     "frameHeight": 96,
-    "frameCount": 1
+    "frameCount": 1,
+    "frameMs": 1000,
+    "sideways": false
   },
   "hang": {
     "frameWidth": 110,
     "frameHeight": 222,
-    "frameCount": 2
+    "frameCount": 2,
+    "frameMs": 280,
+    "sideways": false
   }
 }
