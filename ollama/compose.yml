@@ -1,0 +1,35 @@
+# Local LLM for the chibi's chat. Start it with:
+#   docker compose -f ollama/compose.yml up -d
+#   ollama/setup.sh            # pulls the chat model
+# The API listens on 127.0.0.1:11434 only (not reachable from the network).
+name: danso-chibi
+
+services:
+  ollama:
+    image: ollama/ollama:0.40.16
+    container_name: danso-chibi-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      # Unload the model after 10 minutes without chat to give the RAM back.
+      OLLAMA_KEEP_ALIVE: "10m"
+      # One chat at a time is all the chibi needs.
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+    # Optional NVIDIA GPU. Needs nvidia-container-toolkit on the host
+    # (`sudo pacman -S nvidia-container-toolkit`, then
+    # `sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker`).
+    # Without it, leave this commented out: Ollama runs on the CPU.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  ollama-models:
