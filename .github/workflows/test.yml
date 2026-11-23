@@ -1,0 +1,22 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  brain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: JSON files are valid
+        run: |
+          for f in config/*.json hooks/*.json sprites/sprites.json characters/*/sprites.json manifest.json; do
+            python -m json.tool "$f" > /dev/null || { echo "invalid: $f"; exit 1; }
+          done

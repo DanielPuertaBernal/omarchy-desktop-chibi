@@ -1,0 +1,129 @@
+{
+  "_meta": {
+    "box": [
+      180,
+      400
+    ],
+    "scale": 1,
+    "placeholder": true
+  },
+  "idle": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 6,
+    "frameMs": 240,
+    "sideways": false
+  },
+  "walk": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 6,
+    "frameMs": 140,
+    "sideways": true
+  },
+  "run": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 6,
+    "frameMs": 80,
+    "sideways": true
+  },
+  "sit": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 2,
+    "frameMs": 900,
+    "sideways": false
+  },
+  "sleep": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 1,
+    "frameMs": 1000,
+    "sideways": false
+  },
+  "hang": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 2,
+    "frameMs": 280,
+    "sideways": false
+  },
+  "fall": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 4,
+    "frameMs": 120,
+    "sideways": false
+  },
+  "climb": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 4,
+    "frameMs": 200,
+    "sideways": true
+  },
+  "think": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 4,
+    "frameMs": 450,
+    "sideways": false
+  },
+  "work": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 4,
+    "frameMs": 110,
+    "sideways": false
+  },
+  "wave": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 4,
+    "frameMs": 160,
+    "sideways": false
+  },
+  "celebrate": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 4,
+    "frameMs": 130,
+    "sideways": false
+  },
+  "bow": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 4,
+    "frameMs": 300,
+    "sideways": false
+  },
+  "oops": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 4,
+    "frameMs": 130,
+    "sideways": false
+  },
+  "talk": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 4,
+    "frameMs": 160,
+    "sideways": false
+  },
+  "dance": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 6,
+    "frameMs": 170,
+    "sideways": false
+  },
+  "jump": {
+    "frameWidth": 180,
+    "frameHeight": 400,
+    "frameCount": 4,
+    "frameMs": 260,
+    "sideways": false
+  }
+}

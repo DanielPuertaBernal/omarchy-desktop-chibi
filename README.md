@@ -4,16 +4,45 @@
   <img src="docs/poses.png" alt="All eight poses: idle, walk, run, dance, jump, sit, sleep and hang">
 </p>
 
-A little chibi character that lives on your desktop. She roams across every
+A little character that lives on your desktop. She roams across every
 screen on her own and picks what to do at random: walk, run, chase your
-cursor, dance, sit, jump, idle or take a nap. Grab her with the mouse and she
-dangles from your cursor; let go and she drops back down.
+cursor, dance, sit, jump, climb a screen edge, peek from the bottom, idle or
+take a nap (and she naps when you leave the computer). Grab her with the
+mouse and she dangles from your cursor; let go and she drops back down, or
+throw her and she flies.
+
+She also has a personality and a voice:
+
+- **Click her to chat.** A small chat panel opens next to her and her replies
+  stream into a speech bubble. By default she answers from her personality
+  file (keyword-matched, in character, no model and no network); a local
+  Ollama model or Gemini is optional. See [docs/chat.md](docs/chat.md).
+- **She stays in her corner.** She sits, idles and naps in the bottom-right
+  corner (`home` in `personality.json`, or `"roam"` to wander every screen)
+  and only leaves it when you drag her or a reaction needs it.
+- **She notices what you do.** Open the calculator, a browser, a chat app or
+  a game and she has something to say about it (Hyprland events; per-app
+  lines, rate-limited, optional notification reactions).
+- **She reacts to your AI coding agent.** With the Claude Code hooks
+  installed she thinks when you send a prompt, works on her laptop while
+  tools run (the bubble says what: "Editando Service.qml"), waves when the
+  agent needs you, bows when you accept, stumbles when a tool fails and
+  celebrates with confetti when it is done. See
+  [docs/agent-hooks.md](docs/agent-hooks.md).
+- Now and then she says something on her own (can be turned off).
 
 It is built with [Quickshell](https://quickshell.org) (QML). It runs as an
 [Omarchy](https://omarchy.org) plugin or standalone on any distro, and works
 with any character you want: swap the sprites and you have your own.
 
-Everything else stays click-through: only her own box takes mouse input.
+Everything else stays click-through: only her own box takes mouse input
+(and the chat panel while it is open).
+
+Two characters are included: **Kumo** (`characters/kumo`, the default: a
+full-body anime girl, 180 × 400 px, still with **placeholder art**) and the
+original **chibi** (`sprites/`). Pick one with `character` in
+`personality.json`. New art for Kumo can be made with the
+[Gemini prompts](docs/gemini-sprite-prompts.md).
 
 ## Requirements
 
@@ -21,8 +50,11 @@ Everything else stays click-through: only her own box takes mouse input.
   KDE Plasma, niri, river, Wayfire... GNOME is **not** supported (no
   layer-shell).
 - [Quickshell](https://quickshell.org/docs/master/guide/install-setup).
-- Chasing the cursor only works on **Hyprland** (it uses `hyprctl cursorpos`).
-  On other compositors she does everything else and simply never chases.
+- Python 3 (standard library only) for the chat and the agent bridge.
+- Optional: Docker, only if you want a real chat model (`ollama/setup.sh`).
+- Chasing the cursor, napping when you are idle and jumping to the agent's
+  window only work on **Hyprland** (they use `hyprctl`). On other compositors
+  she does everything else.
 
 ## Install
 
@@ -100,8 +132,9 @@ If you share one mouse between a Linux and a Windows PC with
 single chibi over the local network: now and then she walks off the shared
 edge and appears on the other PC, and you can carry her across.
 
-- **Carry her:** click her once (no drag) and she hangs from the cursor; move
-  to the other PC as usual and click again to drop her. Press-and-drag still
+- **Carry her:** right-click her (no drag) and she hangs from the cursor; move
+  to the other PC as usual and click again to drop her. (A left click opens
+  the chat.) The Windows copy has no chat or agent reactions yet. Press-and-drag still
   works, but only within one PC: Deskflow does not switch screens while a
   mouse button is held.
 - Only one copy shows her at a time. If the other PC goes away, she comes
@@ -128,21 +161,50 @@ Allow UDP port 47800 between the two PCs: on Linux with ufw,
 accept the firewall prompt the first time `chibi.exe` starts (private
 networks).
 
+## Talk to her
+
+Click her, type, Enter. Esc closes the chat. She answers with lines from
+her personality (`replies` matched by keyword, `fallbackReplies` otherwise):
+no model, no network. Her name, tone, lines and corner live in
+`config/personality.json`; copy it to `~/.config/danso-chibi/personality.json`
+to make her yours.
+
+Optional real model: `ollama/setup.sh` (Ollama in Docker, 127.0.0.1 only)
+and `"backend": "ollama"` in `~/.config/danso-chibi/chat.json`, or Gemini.
+Details and the model comparison: [docs/chat.md](docs/chat.md).
+
+## Agent reactions
+
+Merge [`hooks/claude-code-settings.json`](hooks/claude-code-settings.json) into
+`~/.claude/settings.json`. Click her while she waves to jump to the agent's
+terminal. See [docs/agent-hooks.md](docs/agent-hooks.md).
+
 ## Tweak her
 
 Edit the `Tweakables` block at the top of `Service.qml`:
 
 | Property     | What it does                                         |
 |--------------|------------------------------------------------------|
-| `sizeScale`  | Size multiplier (raise it to make her bigger)        |
+| `sleepAfterIdleSec` | Nap after the cursor has not moved this long (Hyprland) |
 | `walkSpeed`, `runSpeed`, `chaseSpeed` | Speeds in px per second     |
 | `margin`, `topMargin` | Distance kept from screen edges / the bar   |
 | `weights`    | Relative odds of each activity                       |
 
+Her size is `scale` in `personality.json` (0.75, 1, 1.25...; `0` keeps the
+character's own).
+
 ## Make your own character
 
 Anyone can add a character. You only need a set of sprite strips; the code
-stays the same.
+stays the same. The full animation set, sizes and fallbacks are in
+[docs/sprites.md](docs/sprites.md); the steps below still work for a
+character with the original eight strips.
+
+Keep your own characters outside the repo, in
+`~/.config/danso-chibi/characters/<name>/` (strips, `sprites.json` and an
+optional `personality.json` with her own name and lines), then set
+`"character": "<name>"` in `~/.config/danso-chibi/personality.json`.
+Folders in the repo's `characters/` other than `kumo` are git-ignored.
 
 ### 1. Make the sprites
 
@@ -182,18 +244,20 @@ description for every animation so she looks consistent.
 
 ### 2. Describe the frames
 
-Update the frame sizes in **both** places (they must match):
+Put the strips in a folder (for example `characters/mine/`) with a
+`sprites.json` describing each strip: frame size, frame count, playback speed
+(`frameMs`, milliseconds per frame) and whether it is mirrored to go left
+(`sideways: true` for `walk` and `run`):
 
-- `sprites/sprites.json`:
-  ```json
-  "walk": { "frameWidth": 109, "frameHeight": 138, "frameCount": 6 }
-  ```
-- the `anims` block in `Service.qml`, which also sets the playback speed
-  (`frameMs`, milliseconds per frame) and whether the strip is mirrored
-  (`sideways: true` for `walk` and `run`):
-  ```qml
-  walk: { frameWidth: 109, frameHeight: 138, frameCount: 6, frameMs: 140, sideways: true },
-  ```
+```json
+{
+  "_meta": { "box": [90, 135], "scale": 1 },
+  "walk": { "frameWidth": 109, "frameHeight": 138, "frameCount": 6, "frameMs": 140, "sideways": true }
+}
+```
+
+Then set `"character": "characters/mine"` in `personality.json`. (The Windows
+port still reads its own table in `windows/Chibi.qml`.)
 
 To get `frameWidth`, divide the PNG width by the number of frames
 (`file sprites/walk.png` shows the size).
@@ -231,7 +295,8 @@ characters or animations here are welcome too.
 ## Credits
 
 - Code: Daniel Puerta Bernal.
-- Sprites: generated with Google Gemini.
+- Sprites: the chibi was generated with Google Gemini; Kumo's current strips
+  are placeholders drawn by `tools/make-placeholders.py`.
 
 ## License
 
