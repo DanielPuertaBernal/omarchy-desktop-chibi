@@ -1,5 +1,5 @@
 {
-  "backend": "ollama",
+  "backend": "scripted",
   "ollama": {
     "url": "http://127.0.0.1:11434",
     "model": "qwen2.5:1.5b",

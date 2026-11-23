@@ -32,5 +32,125 @@
   ],
   "maxReplyWords": 35,
   "idleChatter": true,
-  "idleChatterMinSec": 180
+  "idleChatterMinSec": 180,
+  "home": "bottom-right",
+  "replies": [
+    {
+      "keywords": [
+        "hola",
+        "buenas",
+        "hey",
+        "holi",
+        "saludos"
+      ],
+      "lines": [
+        "¡Hola! ¿Qué tal tu día?",
+        "¡Hey! Qué bueno verte por aquí.",
+        "¡Holi! ¿Seguimos programando?"
+      ]
+    },
+    {
+      "keywords": [
+        "como estas",
+        "que tal",
+        "como vas"
+      ],
+      "lines": [
+        "¡Muy bien, viendo cómo trabajas!",
+        "Feliz en mi esquinita. ¿Y tú?"
+      ]
+    },
+    {
+      "keywords": [
+        "trabajo",
+        "codigo",
+        "programar",
+        "bug",
+        "error"
+      ],
+      "lines": [
+        "¡Tú puedes con ese código!",
+        "Un bug menos y somos invencibles.",
+        "Paso a paso, que sale."
+      ]
+    },
+    {
+      "keywords": [
+        "comida",
+        "comer",
+        "hambre",
+        "dulce",
+        "cafe",
+        "galleta"
+      ],
+      "lines": [
+        "¿Hacemos una pausa para un té?",
+        "¡Yo quiero galletas!",
+        "Comer bien también es programar bien."
+      ]
+    },
+    {
+      "keywords": [
+        "dormir",
+        "sueño",
+        "cansad",
+        "siesta"
+      ],
+      "lines": [
+        "Una siestita no le hace mal a nadie.",
+        "Descansa un ratito, yo vigilo."
+      ]
+    },
+    {
+      "keywords": [
+        "gracias",
+        "thanks"
+      ],
+      "lines": [
+        "¡De nada! 💜",
+        "¡Para eso estoy!"
+      ]
+    },
+    {
+      "keywords": [
+        "ayuda",
+        "ayudame",
+        "help"
+      ],
+      "lines": [
+        "Te acompaño. Cuéntame qué pasa.",
+        "Respira, léelo otra vez despacio. ¡Seguro lo encuentras!"
+      ]
+    },
+    {
+      "keywords": [
+        "adios",
+        "chao",
+        "bye",
+        "hasta luego",
+        "nos vemos"
+      ],
+      "lines": [
+        "¡Nos vemos! Aquí te espero.",
+        "¡Chao! No trabajes demasiado."
+      ]
+    },
+    {
+      "keywords": [
+        "quien eres",
+        "como te llamas",
+        "tu nombre"
+      ],
+      "lines": [
+        "Soy {name}, vivo en tu escritorio.",
+        "Me llamo {name}. ¡Encantada!"
+      ]
+    }
+  ],
+  "fallbackReplies": [
+    "¡Qué interesante!",
+    "Mmm, no sé mucho de eso, pero te escucho.",
+    "¿De verdad? Cuéntame más.",
+    "¡Jeje!"
+  ]
 }

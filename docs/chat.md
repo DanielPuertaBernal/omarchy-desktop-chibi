@@ -9,10 +9,33 @@ She remembers the last `memoryTurns` exchanges in RAM (lost on restart
 unless `persistHistory` is on, which saves them to
 `~/.local/state/danso-chibi/history.json`).
 
+## Scripted replies (default: no model, no network)
+
+With `"backend": "scripted"` (the default) she answers from her personality
+file. Each entry of `replies` has `keywords` and `lines`; the first entry
+with a keyword at the start of a word in your message wins ("dulce" also
+matches "dulces"; case and accents are ignored), and she says one of its
+lines, never the same one twice in a row. Nothing matched: a line from
+`fallbackReplies`. `{name}` is replaced by her name.
+
+```json
+"replies": [
+  { "keywords": ["hola", "buenas"], "lines": ["Hola.", "Mm. Hola."] },
+  { "keywords": ["dulce", "chocolate"], "lines": ["¿Dulces? Ahora sí te escucho."] }
+],
+"fallbackReplies": ["Ajá...", "Qué pereza."]
+```
+
+A character folder's own `personality.json` can carry its own replies (see
+[sprites.md](sprites.md)).
+
+## Optional: a real model
+
+Set `"backend": "ollama"` or `"gemini"` in `~/.config/danso-chibi/chat.json`.
 If the model is unreachable she says one of her `offlineLines` ("Uy, ahora
 no puedo hablar...") instead of failing.
 
-## Local model (Ollama in Docker, default)
+### Local model (Ollama in Docker)
 
 ```sh
 ollama/setup.sh                                   # starts the container, pulls qwen2.5:1.5b
@@ -27,7 +50,7 @@ docker compose -f ollama/compose.yml start        # start it again later
 - NVIDIA GPU: uncomment the `deploy` block in `ollama/compose.yml` after
   installing `nvidia-container-toolkit`. Without it, it runs on the CPU.
 
-### Model choice
+#### Model choice
 
 Two ~1–1.5B models were tested on the CPU (8-core laptop, 16 GB RAM, no GPU in
 Docker), same personality prompt, three Spanish questions:
@@ -41,7 +64,7 @@ Docker), same personality prompt, three Spanish questions:
 for ~220 MB more RAM. To try gemma3 instead: `ollama/setup.sh gemma3:1b` and
 set `"model": "gemma3:1b"` in your `chat.json`.
 
-## Gemini (optional)
+### Gemini
 
 ```sh
 export GEMINI_API_KEY=...        # in your shell profile / session env, never in a file in the repo
@@ -70,13 +93,17 @@ plugin to apply.
 | `scale` | on-screen size multiplier; `0` uses the character's own (`1` for kumo) |
 | `language` | reply language (`es` default) |
 | `tone`, `likes`, `backstory`, `catchphrases` | go into her system prompt |
-| `maxReplyWords` | reply length (bubble-sized; also caps the tokens) |
+| `home` | her corner: `bottom-right` (default), `bottom-left`, `top-right`, `top-left`, or `roam` to wander every screen |
+| `replies`, `fallbackReplies` | scripted chat lines (see above) |
+| `maxReplyWords` | model reply length (bubble-sized; also caps the tokens) |
 | `idleLines` | things she says on her own (plus the catchphrases) |
 | `idleChatter`, `idleChatterMinSec` | turn idle lines off, or space them out (at most one every `idleChatterMinSec`–2× that) |
 | `offlineLines` | what she says when the model is down |
 
-`~/.config/danso-chibi/chat.json` overrides `config/chat.json`: `backend`,
+`~/.config/danso-chibi/chat.json` overrides `config/chat.json`: `backend`
+(`scripted`, `ollama`, `gemini`),
 `ollama.url`, `ollama.model`, `gemini.model`, `gemini.apiKeyEnv`,
 `memoryTurns`, `persistHistory`, `timeoutSec`, `bridgePort`.
 
-Nothing is sent anywhere except to the backend you chose; there is no telemetry.
+With the default scripted backend nothing leaves your machine; with a model,
+only to the backend you chose. There is no telemetry.

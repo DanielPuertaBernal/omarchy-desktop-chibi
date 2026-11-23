@@ -57,9 +57,10 @@ class ConfigTest(unittest.TestCase):
     def test_repo_defaults_are_valid(self):
         persona = json.loads((ROOT / "config" / "personality.json").read_text())
         chat = json.loads((ROOT / "config" / "chat.json").read_text())
-        for key in ("name", "language", "tone", "likes", "backstory", "catchphrases", "maxReplyWords"):
+        for key in ("name", "language", "tone", "likes", "backstory", "catchphrases", "maxReplyWords",
+                    "replies", "fallbackReplies", "home"):
             self.assertIn(key, persona)
-        self.assertEqual(chat["backend"], "ollama")
+        self.assertEqual(chat["backend"], "scripted")  # no model, no network by default
         self.assertEqual(chat["ollama"]["url"], "http://127.0.0.1:11434")
         self.assertEqual(chat["gemini"], {"model": chat["gemini"]["model"], "apiKeyEnv": "GEMINI_API_KEY"})  # key only from env
 
@@ -155,6 +156,49 @@ class ChatTest(unittest.TestCase):
         cfg = {"backend": "gemini", "gemini": {"apiKeyEnv": "CHIBI_TEST_NO_SUCH_KEY"}}
         _, events = self.run_chat(cfg)
         self.assertEqual(events[-1]["t"], "chat-error")
+
+
+class ScriptedChatTest(unittest.TestCase):
+    PERSONA = dict(PERSONA, replies=[
+        {"keywords": ["hola", "buenas"], "lines": ["Hola, {name}.", "Buenas, ¿qué hay?"]},
+        {"keywords": ["dulce", "comida"], "lines": ["¿Trajiste dulces?"]},
+    ], fallbackReplies=["Mmm.", "Ajá."])
+
+    def ask(self, text, persona=None):
+        events = []
+        b = brain.Brain(persona or self.PERSONA, {"backend": "scripted"}, events.append,
+                        dict(brain.BACKENDS, ollama=None, gemini=None))
+        b.ask(text)
+        return events
+
+    def answer(self, events):
+        return "".join(e["text"] for e in events if e["t"] == "chat-token")
+
+    def test_keyword_reply_without_any_network(self):
+        events = self.ask("¡HOLÁ! qué tal")  # case and accents do not matter
+        self.assertIn(self.answer(events), ["Hola, Kumo.", "Buenas, ¿qué hay?"])
+        self.assertEqual(events[0]["t"], "chat-start")
+        self.assertEqual(events[-1]["t"], "chat-end")
+        self.assertGreater(sum(e["t"] == "chat-token" for e in events), 1)  # streams in pieces
+
+    def test_keyword_prefix_matches_plural(self):
+        self.assertEqual(self.answer(self.ask("me das dulces")), "¿Trajiste dulces?")
+
+    def test_unknown_text_uses_fallbacks(self):
+        self.assertIn(self.answer(self.ask("xyzzy")), ["Mmm.", "Ajá."])
+
+    def test_does_not_repeat_the_same_line_twice_in_a_row(self):
+        events = []
+        b = brain.Brain(self.PERSONA, {"backend": "scripted"}, events.append)
+        answers = []
+        for _ in range(6):
+            events.clear()
+            b.ask("hola")
+            answers.append(self.answer(events))
+        self.assertTrue(all(a != b2 for a, b2 in zip(answers, answers[1:])))
+
+    def test_persona_without_replies_still_answers(self):
+        self.assertTrue(self.answer(self.ask("hola", PERSONA)))
 
 
 class AgentTest(unittest.TestCase):

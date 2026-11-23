@@ -88,6 +88,11 @@ character with just the original eight strips still plays every state.
 
 - `_meta.box`: her hit box / anchor in px (defaults to the idle frame size).
 - `_meta.scale`: default on-screen scale for this character.
+- **Sharper on scaled screens:** with monitor scaling (e.g. 1.25) 1x frames
+  get stretched and the line art blurs. Ship frames at 2x (e.g. 360 × 800,
+  resized with `-filter Lanczos`) with `"box": [360, 800], "scale": 0.5`:
+  she keeps the same on-screen size and the compositor only scales down.
+  Positions are rounded to whole pixels for the same reason.
 - `frameMs` (ms per frame) and `sideways` (mirrored to go left) are optional;
   defaults exist for the classic names.
 - `motion` (optional) adds procedural movement to strips with few frames:

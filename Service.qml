@@ -107,6 +107,10 @@ Scope {
   property bool idleChatter: true
   property int idleChatterMinSec: 180
   property real userScale: 0 // personality.json `scale`; 0 = the character's own
+  // personality.json `home`: a screen corner she stays in (bottom-right,
+  // bottom-left, top-right, top-left) or "roam" to wander every screen.
+  property string home: "bottom-right"
+  readonly property bool homebody: home !== "roam" && home !== ""
 
   // ---- State (global desktop coordinates of her anchor box) ----
   readonly property real w: boxW * sizeScale
@@ -215,6 +219,42 @@ Scope {
     const rh = Math.max(1, s.height - h - margin - topMargin)
     targetX = s.x + margin + Math.random() * rw
     targetY = s.y + topMargin + Math.random() * rh
+  }
+
+  // Her corner on the screen she is on (or the first screen).
+  function homePoint() {
+    const s = screenAt(gx + w / 2, gy + h / 2)
+    if (!s) return null
+    const inset = 24
+    const right = home.indexOf("left") < 0
+    const top = home.indexOf("top") === 0
+    return {
+      x: right ? s.x + s.width - w - inset : s.x + inset,
+      y: top ? s.y + topMargin : s.y + s.height - h - 8
+    }
+  }
+
+  // Homebody routine: walk back to the corner if she is away from it,
+  // otherwise sit, stand or nap there.
+  function pickHome() {
+    caught = false
+    afterArrive = ""
+    visiting = false
+    const p = homePoint()
+    if (p && (Math.abs(gx - p.x) > 6 || Math.abs(gy - p.y) > 6)) {
+      mode = "walk"
+      targetX = p.x
+      targetY = p.y
+      moodTimer.interval = 30000
+      moodTimer.restart()
+      return
+    }
+    const r = Math.random()
+    mode = r < 0.6 ? "sit" : r < 0.85 ? "idle" : "sleep"
+    moodTimer.interval = mode === "sleep" ? 30000 + Math.random() * 60000
+                       : mode === "sit" ? 20000 + Math.random() * 40000
+                       : 8000 + Math.random() * 10000
+    moodTimer.restart()
   }
 
   function chaseTo(px, py) {
@@ -346,6 +386,7 @@ Scope {
       userScale = Number(message.scale) || 0
       if (userScale > 0) sizeScale = userScale
       if (message.character && message.character !== charDir) charDir = message.character
+      if (message.home !== undefined) home = String(message.home)
       chatterTimer.restartRandom()
     } else if (message.t === "chat-start") {
       chatId = message.id
@@ -505,6 +546,7 @@ Scope {
       return
     }
     if (agentState !== "idle") { showReaction(); return }
+    if (homebody) { pickHome(); return }
     const odds = Object.assign({}, weights)
     if (!canChase) delete odds.chase
     if (linkUp()) odds.visit = 1
@@ -801,6 +843,8 @@ Scope {
       if (s) {
         root.gx = s.x + s.width / 2
         root.gy = s.y + s.height - root.h - root.margin
+        const p = root.homebody ? root.homePoint() : null
+        if (p) { root.gx = p.x; root.gy = p.y }
       }
       root.present = true
       root.pickNext()
@@ -1072,8 +1116,9 @@ Scope {
 
         Item {
           id: girl
-          x: root.gx - panel.modelData.x
-          y: root.gy - panel.modelData.y
+          // Whole logical pixels: fractional positions blur the line art.
+          x: Math.round(root.gx - panel.modelData.x)
+          y: Math.round(root.gy - panel.modelData.y)
           width: root.w
           height: root.h
           readonly property bool onThisScreen: x + width > -200 && x < stage.width + 200
@@ -1120,11 +1165,11 @@ Scope {
             smooth: true
             width: a.frameWidth * root.sizeScale
             height: a.frameHeight * root.sizeScale
-            x: (root.w - width) / 2
+            x: Math.round((root.w - width) / 2)
             // bounce: small hops; breathe: a slow bob of a pixel or two.
             readonly property real hop: root.motion === "bounce" ? 10 * Math.abs(Math.sin(root.motionT * Math.PI * 2.2))
                                       : root.motion === "breathe" ? 1.5 * (1 + Math.sin(root.motionT * 2.4)) : 0
-            y: root.h - height - root.lift - hop * root.sizeScale
+            y: Math.round(root.h - height - root.lift - hop * root.sizeScale)
             onSourceChanged: restart()
             transform: [
               Scale {

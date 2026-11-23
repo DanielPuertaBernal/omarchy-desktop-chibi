@@ -14,8 +14,12 @@ throw her and she flies.
 She also has a personality and a voice:
 
 - **Click her to chat.** A small chat panel opens next to her and her replies
-  stream into a speech bubble. The model runs locally with Ollama in Docker
-  (or Gemini, with your own API key). See [docs/chat.md](docs/chat.md).
+  stream into a speech bubble. By default she answers from her personality
+  file (keyword-matched, in character, no model and no network); a local
+  Ollama model or Gemini is optional. See [docs/chat.md](docs/chat.md).
+- **She stays in her corner.** She sits, idles and naps in the bottom-right
+  corner (`home` in `personality.json`, or `"roam"` to wander every screen)
+  and only leaves it when you drag her or a reaction needs it.
 - **She reacts to your AI coding agent.** With the Claude Code hooks
   installed she thinks when you send a prompt, works on her laptop while
   tools run (the bubble says what: "Editando Service.qml"), waves when the
@@ -44,7 +48,7 @@ original **chibi** (`sprites/`). Pick one with `character` in
   layer-shell).
 - [Quickshell](https://quickshell.org/docs/master/guide/install-setup).
 - Python 3 (standard library only) for the chat and the agent bridge.
-- Optional: Docker for the local chat model (`ollama/setup.sh`).
+- Optional: Docker, only if you want a real chat model (`ollama/setup.sh`).
 - Chasing the cursor, napping when you are idle and jumping to the agent's
   window only work on **Hyprland** (they use `hyprctl`). On other compositors
   she does everything else.
@@ -156,14 +160,15 @@ networks).
 
 ## Talk to her
 
-```sh
-ollama/setup.sh     # once: starts Ollama in Docker (127.0.0.1 only) and pulls qwen2.5:1.5b
-```
+Click her, type, Enter. Esc closes the chat. She answers with lines from
+her personality (`replies` matched by keyword, `fallbackReplies` otherwise):
+no model, no network. Her name, tone, lines and corner live in
+`config/personality.json`; copy it to `~/.config/danso-chibi/personality.json`
+to make her yours.
 
-Click her, type, Enter. Esc closes the chat. Her name, tone, likes,
-catchphrases and reply length live in `config/personality.json`; copy it to
-`~/.config/danso-chibi/personality.json` to make her yours. Details, the model
-comparison and Gemini setup: [docs/chat.md](docs/chat.md).
+Optional real model: `ollama/setup.sh` (Ollama in Docker, 127.0.0.1 only)
+and `"backend": "ollama"` in `~/.config/danso-chibi/chat.json`, or Gemini.
+Details and the model comparison: [docs/chat.md](docs/chat.md).
 
 ## Agent reactions
 
