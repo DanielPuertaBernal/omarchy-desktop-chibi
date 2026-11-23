@@ -9,6 +9,11 @@
     "model": "gemini-2.5-flash",
     "apiKeyEnv": "GEMINI_API_KEY"
   },
+  "claude": {
+    "command": "claude",
+    "model": "haiku",
+    "timeoutSec": 30
+  },
   "memoryTurns": 6,
   "persistHistory": false,
   "timeoutSec": 60,

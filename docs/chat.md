@@ -77,9 +77,53 @@ her for `nagAfterSec` seconds (default 600); idle chatter stays rate-limited by
 
 ## Optional: a real model
 
-Set `"backend": "ollama"` or `"gemini"` in `~/.config/yorisou/chat.json`.
-If the model is unreachable she says one of her `offlineLines` ("Uy, ahora
-no puedo hablar...") instead of failing.
+Set `"backend"` to `"claude-cli"`, `"ollama"` or `"gemini"` in
+`~/.config/yorisou/chat.json`. If the model fails she falls back to
+`fallback`: `"scripted"` (her keyword lines; the default for `claude-cli`) or
+`"offline"` (one of her `offlineLines`, the default for the others).
+
+### The Claude CLI on this PC (`claude-cli`)
+
+Uses the `claude` command-line tool you are already signed in to. **Every
+message uses your Claude plan's quota** (a short Haiku reply is small, but it
+counts).
+
+```json
+{ "backend": "claude-cli", "claude": { "model": "haiku", "timeoutSec": 30 } }
+```
+
+Each message runs `claude -p` once, with her personality as the system
+prompt, the last `memoryTurns` exchanges and your message on stdin, and the
+reply streamed into the bubble (`--output-format stream-json`). It is locked
+down:
+
+- `--tools ""`: no tools at all (no shell, no files, no web).
+- `--strict-mcp-config` with an empty `--mcp-config`: no MCP servers.
+- `--restricted`: your user/project settings (hooks, permissions) are not loaded.
+- `--no-session-persistence`, `--disable-slash-commands`; it runs in a new,
+  empty temporary folder; `--dangerously-skip-permissions` is never used.
+- What you type is only ever text for the model; it never becomes a command.
+
+If `claude` is missing, slow (over `timeoutSec`), rate-limited or fails, she
+answers with her scripted lines instead. Back to scripted only:
+`{ "backend": "scripted" }`.
+
+#### Actions (allowlist)
+
+She can open apps **you** list in `personality.json`; the model can only ask
+for them with a tag such as `[action:open_app:calculator]` at the end of its
+reply. The brain removes the tag from the bubble, checks it against the list,
+and runs the first installed command of that entry with a fixed argv (no
+shell). Anything else is ignored.
+
+```json
+"actions": {
+  "open_app": {
+    "calculator": [["gnome-calculator"], ["qalculate-gtk"]],
+    "browser": [["zen-browser"], ["firefox"]]
+  }
+}
+```
 
 ### Local model (Ollama in Docker)
 
@@ -144,15 +188,18 @@ plugin to apply.
 | `replies`, `fallbackReplies` | scripted chat lines (see above) |
 | `nagLines`, `nagAfterSec` | lines when you ignore her for a while (see above) |
 | `appReactions` | lines when you open/focus apps or get notifications (see above) |
+| `actions` | apps she may open when a model backend asks (see "Actions") |
 | `maxReplyWords` | model reply length (bubble-sized; also caps the tokens) |
 | `idleLines` | things she says on her own (plus the catchphrases) |
 | `idleChatter`, `idleChatterMinSec` | turn idle lines off, or space them out (at most one every `idleChatterMinSec`–2× that) |
 | `offlineLines` | what she says when the model is down |
 
 `~/.config/yorisou/chat.json` overrides `config/chat.json`: `backend`
-(`scripted`, `ollama`, `gemini`),
+(`scripted`, `claude-cli`, `ollama`, `gemini`), `fallback`, `claude.command`,
+`claude.model`, `claude.timeoutSec`,
 `ollama.url`, `ollama.model`, `gemini.model`, `gemini.apiKeyEnv`,
 `memoryTurns`, `persistHistory`, `timeoutSec`, `bridgePort`.
 
 With the default scripted backend nothing leaves your machine; with a model,
-only to the backend you chose. There is no telemetry.
+only to the backend you chose (with `claude-cli`, to Anthropic through your
+own `claude` login). There is no telemetry.
