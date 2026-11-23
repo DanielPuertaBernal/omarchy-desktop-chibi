@@ -65,6 +65,34 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(chat["gemini"], {"model": chat["gemini"]["model"], "apiKeyEnv": "GEMINI_API_KEY"})  # key only from env
 
 
+class AppDirTest(unittest.TestCase):
+    def test_new_dir_is_used_when_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "yorisou").mkdir()
+            (base / "danso-chibi").mkdir()
+            self.assertEqual(brain.app_dir(base), base / "yorisou")
+
+    def test_old_dir_is_copied_and_kept(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            old = base / "danso-chibi" / "characters" / "ellen"
+            old.mkdir(parents=True)
+            (old / "sprites.json").write_text("{}")
+            (base / "danso-chibi" / "personality.json").write_text('{"character": "ellen"}')
+            new = brain.app_dir(base)
+            self.assertEqual(new, base / "yorisou")
+            self.assertEqual((new / "personality.json").read_text(), '{"character": "ellen"}')
+            self.assertTrue((new / "characters" / "ellen" / "sprites.json").is_file())
+            self.assertTrue((base / "danso-chibi" / "personality.json").is_file())  # old dir untouched
+            self.assertEqual(sorted(p.name for p in base.iterdir()), ["danso-chibi", "yorisou"])  # no temp left
+
+    def test_nothing_to_migrate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(brain.app_dir(Path(tmp)), Path(tmp) / "yorisou")
+            self.assertFalse((Path(tmp) / "yorisou").exists())  # created only when something writes
+
+
 class CharacterTest(unittest.TestCase):
     def make_char(self, base: Path, name: str, preset=None) -> Path:
         d = base / name

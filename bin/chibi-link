@@ -6,7 +6,7 @@ per line: lines read from stdin are sent to the peer, and datagrams from the
 peer are printed. The first printed line is {"t": "config", ...} so the plugin
 learns which side the peer is on and whether this instance is the primary.
 
-Config: ~/.config/danso-chibi/link.json
+Config: ~/.config/yorisou/link.json (copied from ~/.config/danso-chibi once)
   {"peer": "172.16.11.86", "port": 47800, "side": "left", "primary": true}
 side: where the peer PC sits relative to this one (as arranged in Deskflow).
 Without a config file the link is off and this exits at once.
@@ -14,12 +14,35 @@ Without a config file the link is off and this exits at once.
 
 import json
 import os
+import shutil
 import socket
 import sys
 import threading
 from pathlib import Path
 
-CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "danso-chibi" / "link.json"
+APP_NAME = "yorisou"
+OLD_APP_NAME = "danso-chibi"  # the project's former name
+
+
+def app_dir(base: Path, name: str = APP_NAME, old: str = OLD_APP_NAME) -> Path:
+    """<base>/yorisou. A setup still in <base>/danso-chibi is copied over once
+    (the old folder is left as it is)."""
+    new_dir, old_dir = base / name, base / old
+    if new_dir.exists() or not old_dir.is_dir():
+        return new_dir
+    tmp = base / f".{name}-migrating-{os.getpid()}"
+    try:
+        shutil.copytree(old_dir, tmp, symlinks=True)
+        os.rename(tmp, new_dir)
+        print(f"{name}: copied {old_dir} to {new_dir}", file=sys.stderr)
+    except OSError:
+        shutil.rmtree(tmp, ignore_errors=True)
+        if not new_dir.exists():
+            return old_dir  # could not copy: keep using the old one
+    return new_dir
+
+
+CONFIG = app_dir(Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))) / "link.json"
 
 
 def main() -> int:
