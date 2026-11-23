@@ -7,7 +7,7 @@ holds the keyboard.
 
 She remembers the last `memoryTurns` exchanges in RAM (lost on restart
 unless `persistHistory` is on, which saves them to
-`~/.local/state/danso-chibi/history.json`).
+`~/.local/state/yorisou/history.json`).
 
 ## Scripted replies (default: no model, no network)
 
@@ -77,7 +77,7 @@ her for `nagAfterSec` seconds (default 600); idle chatter stays rate-limited by
 
 ## Optional: a real model
 
-Set `"backend": "ollama"` or `"gemini"` in `~/.config/danso-chibi/chat.json`.
+Set `"backend": "ollama"` or `"gemini"` in `~/.config/yorisou/chat.json`.
 If the model is unreachable she says one of her `offlineLines` ("Uy, ahora
 no puedo hablar...") instead of failing.
 
@@ -116,7 +116,7 @@ set `"model": "gemma3:1b"` in your `chat.json`.
 export GEMINI_API_KEY=...        # in your shell profile / session env, never in a file in the repo
 ```
 
-`~/.config/danso-chibi/chat.json`:
+`~/.config/yorisou/chat.json`:
 
 ```json
 { "backend": "gemini", "gemini": { "model": "gemini-2.5-flash" } }
@@ -128,14 +128,14 @@ plugin.
 
 ## Personality
 
-Copy `config/personality.json` to `~/.config/danso-chibi/personality.json`
+Copy `config/personality.json` to `~/.config/yorisou/personality.json`
 and edit it; only the keys you set override the defaults. Restart the
 plugin to apply.
 
 | Key | What it does |
 |---|---|
 | `name` | her name |
-| `character` | sprite folder: `characters/kumo` (default), `sprites` (original chibi), or the name of a folder in `~/.config/danso-chibi/characters/` (see [sprites.md](sprites.md)); that folder's own `personality.json`, if any, is applied on top |
+| `character` | sprite folder: `characters/kumo` (default), `sprites` (original chibi), or the name of a folder in `~/.config/yorisou/characters/` (see [sprites.md](sprites.md)); that folder's own `personality.json`, if any, is applied on top |
 | `scale` | on-screen size multiplier; `0` uses the character's own (`1` for kumo) |
 | `language` | reply language (`es` default) |
 | `tone`, `likes`, `backstory`, `catchphrases` | go into her system prompt |
@@ -149,7 +149,7 @@ plugin to apply.
 | `idleChatter`, `idleChatterMinSec` | turn idle lines off, or space them out (at most one every `idleChatterMinSec`–2× that) |
 | `offlineLines` | what she says when the model is down |
 
-`~/.config/danso-chibi/chat.json` overrides `config/chat.json`: `backend`
+`~/.config/yorisou/chat.json` overrides `config/chat.json`: `backend`
 (`scripted`, `ollama`, `gemini`),
 `ollama.url`, `ollama.model`, `gemini.model`, `gemini.apiKeyEnv`,
 `memoryTurns`, `persistHistory`, `timeoutSec`, `bridgePort`.

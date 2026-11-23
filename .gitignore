@@ -1,6 +1,6 @@
 __pycache__/
 
-# Personal characters belong in ~/.config/danso-chibi/characters/<name>/.
+# Personal characters belong in ~/.config/yorisou/characters/<name>/.
 # Only the bundled one is tracked, so fan art copied here is never committed.
 /characters/*
 !/characters/kumo/

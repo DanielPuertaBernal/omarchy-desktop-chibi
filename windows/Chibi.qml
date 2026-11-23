@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Window
 
-// Desktop chibi for Windows: the same behaviour as ../Service.qml, hosted in
+// Yorisou for Windows: the same behaviour as ../Service.qml, hosted in
 // a small frameless, always-on-top window that follows her around instead of
 // a full-screen layer-shell overlay. The window ignores the mouse except
 // while the pointer is over her box, so the desktop stays clickable.
@@ -86,7 +86,7 @@ Window {
   y: Math.round(gy - boxY)
   visible: true
   color: "transparent"
-  title: "Desktop chibi"
+  title: "Yorisou"
   flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.NoDropShadowWindowHint
          | (interactive ? 0 : Qt.WindowTransparentForInput)
 

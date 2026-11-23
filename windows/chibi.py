@@ -1,12 +1,12 @@
-"""Desktop chibi for Windows.
+"""Yorisou for Windows.
 
 Hosts Chibi.qml in a Qt Quick engine and adds what Quickshell provided on
 Linux: the global cursor position, the sprites folder and a tray icon to put
 her to sleep, wake her or quit (the window itself has no taskbar entry).
 
 It also carries the UDP link to her twin on the Linux PC, speaking the same
-JSON messages as ../bin/chibi-link. Config: link.json next to chibi.exe (or
-chibi.py), or %APPDATA%\\danso-chibi\\link.json:
+JSON messages as ../bin/chibi-link. Config: link.json next to yorisou.exe (or
+chibi.py), or %APPDATA%\\yorisou\\link.json (old: %APPDATA%\\danso-chibi):
   {"peer": "172.16.11.194", "port": 47800, "side": "right", "primary": false}
 side: where the Linux PC sits relative to this one (as arranged in Deskflow).
 Without a config file she simply stays on this PC.
@@ -40,7 +40,8 @@ def load_link_config() -> dict | None:
     app_dir = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
     candidates = [app_dir / "link.json"]
     if os.environ.get("APPDATA"):
-        candidates.append(Path(os.environ["APPDATA"]) / "danso-chibi" / "link.json")
+        candidates.append(Path(os.environ["APPDATA"]) / "yorisou" / "link.json")
+        candidates.append(Path(os.environ["APPDATA"]) / "danso-chibi" / "link.json")  # former name
     for path in candidates:
         try:
             return json.loads(path.read_text())
@@ -69,19 +70,19 @@ class Bridge(QObject):
         addresses = [a for a in QHostInfo.fromName(str(link["peer"])).addresses()
                      if a.protocol() == QHostAddress.NetworkLayerProtocol.IPv4Protocol]
         if not addresses:
-            print(f"chibi: cannot resolve peer {link['peer']} to IPv4, link disabled", file=sys.stderr)
+            print(f"yorisou: cannot resolve peer {link['peer']} to IPv4, link disabled", file=sys.stderr)
             return
         self._peer = addresses[0]
         try:
             self._port = int(link.get("port", 47800))
         except ValueError:
-            print("chibi: invalid port, link disabled", file=sys.stderr)
+            print("yorisou: invalid port, link disabled", file=sys.stderr)
             return
         self._side = "left" if link.get("side") == "left" else "right"
         self._primary = bool(link.get("primary", False))
         self._socket = QUdpSocket(self)
         if not self._socket.bind(QHostAddress.AnyIPv4, self._port, QUdpSocket.ShareAddress | QUdpSocket.ReuseAddressHint):
-            print(f"chibi: cannot bind UDP {self._port}, link disabled", file=sys.stderr)
+            print(f"yorisou: cannot bind UDP {self._port}, link disabled", file=sys.stderr)
             self._socket = None
             return
         self._socket.readyRead.connect(self._read)
@@ -121,7 +122,7 @@ class Bridge(QObject):
 def build_tray(app: QApplication, bridge: Bridge, sprites: Path) -> QSystemTrayIcon:
     icon = QIcon(QPixmap(str(sprites / "idle.png")).copy(0, 0, 83, 132))
     tray = QSystemTrayIcon(icon, app)
-    tray.setToolTip("Desktop chibi")
+    tray.setToolTip("Yorisou")
 
     menu = QMenu()
     sleep = QAction("Dormir", menu)

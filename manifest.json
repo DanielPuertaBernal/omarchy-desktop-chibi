@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "id": "danso.chibi",
-  "name": "Desktop chibi",
+  "id": "danso.yorisou",
+  "name": "Yorisou",
   "version": "1.0.0",
   "author": "danso",
-  "description": "A chibi girl that roams the screen on her own: walks, runs, chases the cursor, waves, dances, sits and naps",
+  "description": "Yorisou (寄り添う, to stay close): a desktop companion that keeps you company, chats from her personality and reacts to your apps and AI coding agent",
   "kinds": ["service"],
   "entryPoints": {
     "service": "Service.qml"

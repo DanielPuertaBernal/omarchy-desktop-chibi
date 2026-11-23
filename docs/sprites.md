@@ -6,18 +6,18 @@ A character is a folder with one PNG strip per animation plus a
 ```json
 { "character": "characters/kumo" }   // default: new full-body character (placeholder art)
 { "character": "sprites" }           // the original chibi
-{ "character": "ellen" }             // ~/.config/danso-chibi/characters/ellen
+{ "character": "ellen" }             // ~/.config/yorisou/characters/ellen
 ```
 
 ### Your own characters (kept outside the repo)
 
 Put personal characters, and any art you may not publish, in
-`~/.config/danso-chibi/characters/<name>/` and set `"character": "<name>"`.
+`~/.config/yorisou/characters/<name>/` and set `"character": "<name>"`.
 A bare name is looked up there first, then in the repo; an absolute path
 (or `~/...`) also works. An unknown name falls back to `characters/kumo`.
 
 ```
-~/.config/danso-chibi/characters/<name>/
+~/.config/yorisou/characters/<name>/
   sprites.json          required (format below)
   idle.png, walk.png... the strips
   personality.json      optional: her own name, tone, lines (overrides personality.json)
@@ -27,7 +27,7 @@ The repo's `.gitignore` ignores every folder in `characters/` except
 `kumo`, so a character copied into the repo by mistake is not committed.
 
 To switch characters, change `character` in
-`~/.config/danso-chibi/personality.json` and restart the plugin.
+`~/.config/yorisou/personality.json` and restart the plugin.
 
 ## Strip format
 

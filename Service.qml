@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 
-// Desktop chibi: a sprite-animated character that roams across every screen
+// Yorisou: a sprite-animated companion that roams across every screen
 // and picks her own activity (walk, run, chase the cursor, dance, sit, sleep,
 // jump, climb a screen edge, peek from the bottom, idle) at random. She can be
 // dragged and thrown with the mouse. State lives in global desktop
@@ -41,7 +41,7 @@ Scope {
 
   // ---- Character (loaded from <character>/sprites.json) ----
   // Repo-relative ("characters/kumo") or absolute (a user character in
-  // ~/.config/danso-chibi/characters/<name>, resolved by chibi-brain).
+  // ~/.config/yorisou/characters/<name>, resolved by chibi-brain).
   property string charDir: "characters/kumo"
   function charUrl(file) {
     const p = charDir + "/" + file
@@ -129,7 +129,7 @@ Scope {
   property bool facingRight: true
   property bool caught: false // reached the cursor while chasing
   property string afterArrive: "" // "climb" or "peek" once a walk ends
-  // Set by `chibi sleep` / `chibi wake` through stateFile: she naps until woken.
+  // Set by `yorisou sleep` / `yorisou wake` through stateFile: she naps until woken.
   property bool sleepLocked: false
   property bool autoSleep: false // asleep because the user went idle
   // Chasing needs `hyprctl cursorpos`; other compositors don't expose the pointer.
@@ -789,12 +789,12 @@ Scope {
     moodTimer.restart()
   }
 
-  // `bin/chibi` writes "sleep" or "awake" here. A file instead of IPC because
+  // `bin/yorisou` writes "sleep" or "awake" here. A file instead of IPC because
   // third-party services are created without a parent, so an IpcHandler in
   // them never registers with the shell.
   FileView {
     id: stateFile
-    path: Quickshell.env("XDG_RUNTIME_DIR") + "/danso-chibi/state"
+    path: Quickshell.env("XDG_RUNTIME_DIR") + "/yorisou/state"
     watchChanges: true
     printErrors: false
     onFileChanged: reload()
@@ -1091,7 +1091,7 @@ Scope {
       screen: modelData
       anchors { top: true; bottom: true; left: true; right: true }
       color: "transparent"
-      WlrLayershell.namespace: "danso-chibi"
+      WlrLayershell.namespace: "yorisou"
       WlrLayershell.layer: WlrLayer.Overlay
       // The chat field needs the keyboard; otherwise never take it.
       WlrLayershell.keyboardFocus: hasChat ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None

@@ -30,7 +30,7 @@ curl -s -m 1 -H 'X-Chibi: 1' -H "X-Agent-Pid: $PPID" --data-binary @- http://127
 - `-m 1 … || true`: if she's off, the hook returns at once and never blocks
   the agent.
 
-Change the port with `bridgePort` in `~/.config/danso-chibi/chat.json`
+Change the port with `bridgePort` in `~/.config/yorisou/chat.json`
 (and in the hook commands).
 
 ## Install the hooks
