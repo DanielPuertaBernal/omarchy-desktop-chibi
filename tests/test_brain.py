@@ -3,8 +3,10 @@
 import importlib.machinery
 import importlib.util
 import json
+import os
 import tempfile
 import threading
+import time
 import unittest
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -238,6 +240,125 @@ class ScriptedChatTest(unittest.TestCase):
 
     def test_persona_without_replies_still_answers(self):
         self.assertTrue(self.answer(self.ask("hola", PERSONA)))
+
+
+FAKE_CLAUDE = r"""#!/usr/bin/env python3
+import json, os, sys, time
+log = os.environ["FAKE_CLAUDE_LOG"]
+with open(log, "w") as f:
+    json.dump({"argv": sys.argv[1:], "stdin": sys.stdin.read(), "cwd": os.getcwd()}, f)
+mode = os.environ.get("FAKE_CLAUDE_MODE", "ok")
+def out(obj):
+    print(json.dumps(obj), flush=True)
+out({"type": "system", "subtype": "init", "tools": [], "mcp_servers": []})
+if mode == "slow":
+    time.sleep(10)
+if mode == "crash":
+    sys.exit(1)
+if mode == "error":
+    out({"type": "result", "subtype": "success", "is_error": True, "result": "rate limited"})
+    sys.exit(1)
+for piece in os.environ.get("FAKE_CLAUDE_PIECES", "Hola|, pesado.").split("|"):
+    out({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": piece}}})
+out({"type": "result", "subtype": "success", "is_error": False, "result": "..."})
+"""
+
+
+class ClaudeCliTest(unittest.TestCase):
+    PERSONA = dict(PERSONA, replies=[{"keywords": ["hola"], "lines": ["Hola guion."]}], actions={
+        "open_app": {"calculator": [["definitely-not-installed-calc"], ["true"]], "nothing": [["no-such-bin"]]},
+    })
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.fake = self.dir / "claude"
+        self.fake.write_text(FAKE_CLAUDE)
+        self.fake.chmod(0o755)
+        self.log = self.dir / "log.json"
+        self.env = dict(FAKE_CLAUDE_LOG=str(self.log))
+        self.launched = []
+
+    def tearDown(self):
+        for key in ("FAKE_CLAUDE_LOG", "FAKE_CLAUDE_MODE", "FAKE_CLAUDE_PIECES"):
+            os.environ.pop(key, None)
+        self.tmp.cleanup()
+
+    def ask(self, text, mode="ok", pieces=None, timeout=5, command=None, ask_twice=False):
+        os.environ.update(self.env, FAKE_CLAUDE_MODE=mode)
+        if pieces:
+            os.environ["FAKE_CLAUDE_PIECES"] = pieces
+        events = []
+        chat = {"backend": "claude-cli", "claude": {"command": command or str(self.fake), "timeoutSec": timeout}}
+        b = brain.Brain(self.PERSONA, chat, events.append)
+        b.launcher = self.launched.append
+        b.ask(text)
+        if ask_twice:
+            events.clear()
+            b.ask("¿y ahora?")
+        return events
+
+    def answer(self, events):
+        return "".join(e["text"] for e in events if e["t"] == "chat-token")
+
+    def test_streams_reply_with_no_tools_no_mcp_and_safe_flags(self):
+        events = self.ask("hola")
+        self.assertEqual(self.answer(events), "Hola, pesado.")
+        self.assertEqual(events[-1]["t"], "chat-end")
+        call = json.loads(self.log.read_text())
+        argv = call["argv"]
+        self.assertEqual(argv[argv.index("--tools") + 1], "")
+        self.assertIn("--strict-mcp-config", argv)
+        self.assertEqual(argv[argv.index("--mcp-config") + 1], '{"mcpServers":{}}')
+        self.assertIn("--restricted", argv)
+        self.assertEqual(argv[argv.index("--model") + 1], "haiku")
+        self.assertNotIn("--dangerously-skip-permissions", argv)
+        self.assertTrue(all("hola" not in a for a in argv))  # user text only on stdin
+        self.assertIn("Mensaje nuevo del usuario: hola", call["stdin"])
+        self.assertTrue(Path(call["cwd"]).name.startswith("yorisou-claude-"))
+        self.assertFalse(Path(call["cwd"]).exists())  # the empty work dir is removed
+
+    def test_memory_goes_into_the_next_prompt(self):
+        self.ask("hola", ask_twice=True)
+        stdin = json.loads(self.log.read_text())["stdin"]
+        self.assertIn("Usuario: hola", stdin)
+        self.assertIn("Tú: Hola, pesado.", stdin)
+
+    def test_allowlisted_action_runs_with_fixed_argv_and_tag_is_hidden(self):
+        events = self.ask("abre la calculadora", pieces="Ugh, vale. [act|ion:open_app:calcu|lator]")
+        self.assertEqual(self.answer(events).strip(), "Ugh, vale.")
+        self.assertEqual(self.launched, [["true"]])  # first installed candidate
+        self.assertIn({"t": "action", "kind": "open_app", "target": "calculator"}, events)
+
+    def test_actions_outside_the_allowlist_are_ignored(self):
+        events = self.ask("x", pieces="No. [action:open_app:bash] [action:run:rm] [action:open_app:nothing]")
+        self.assertEqual(self.launched, [])
+        self.assertNotIn("[action", self.answer(events))
+        self.assertFalse(any(e["t"] == "action" for e in events))
+
+    def test_errors_fall_back_to_scripted_replies(self):
+        for mode in ("error", "crash"):
+            self.assertEqual(self.answer(self.ask("hola", mode=mode)), "Hola guion.")
+        self.assertEqual(self.answer(self.ask("hola", command=str(self.dir / "missing"))), "Hola guion.")
+
+    def test_timeout_falls_back(self):
+        start = time.monotonic()
+        events = self.ask("hola", mode="slow", timeout=1)
+        self.assertLess(time.monotonic() - start, 5)
+        self.assertEqual(self.answer(events), "Hola guion.")
+
+    def test_system_prompt_lists_only_allowed_apps(self):
+        prompt = brain.system_prompt(self.PERSONA)
+        self.assertIn("[action:open_app:NOMBRE]", prompt)
+        self.assertIn("calculator, nothing", prompt)
+        self.assertNotIn("[action", brain.system_prompt(PERSONA))  # no actions: no tag at all
+
+
+class ActionFilterTest(unittest.TestCase):
+    def test_keeps_normal_brackets(self):
+        f = brain.ActionFilter()
+        self.assertEqual(f.feed("Mira [esto] y [a") + f.feed("hí]") + f.finish(), "Mira [esto] y [ahí]")
+        self.assertEqual(f.actions, [])
 
 
 class AppReactorTest(unittest.TestCase):

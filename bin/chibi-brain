@@ -39,6 +39,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import tempfile
 import sys
 import threading
 import time
@@ -161,14 +162,15 @@ def system_prompt(persona: dict) -> str:
     phrases = " / ".join(persona.get("catchphrases", []))
     if is_spanish(persona):
         lines = [
-            f"Eres {name}, una pequeña chibi que vive en el escritorio del usuario.",
+            f"Eres {name}, una chica que vive en el escritorio del usuario.",
             f"Personalidad: {persona.get('tone', 'alegre y curiosa')}.",
             f"Historia: {persona.get('backstory', '')}",
             f"Te gusta: {likes}." if likes else "",
             f"Frases típicas (úsalas a veces, no siempre): {phrases}" if phrases else "",
             "Reglas: responde SIEMPRE en español, en primera persona y sin salir del personaje.",
             f"Respuestas muy cortas: como máximo {words} palabras, una o dos frases, sin listas ni markdown.",
-            "No digas que eres una IA ni un modelo de lenguaje; eres " + name + ".",
+            "No digas que eres una IA, Claude ni un modelo de lenguaje; eres " + name + ".",
+            action_prompt(persona, True),
         ]
     else:
         lines = [
@@ -179,9 +181,97 @@ def system_prompt(persona: dict) -> str:
             f"Catchphrases (use them sometimes, not always): {phrases}" if phrases else "",
             f"Rules: always answer in {persona.get('language', 'English')}, first person, stay in character.",
             f"Very short replies: at most {words} words, one or two sentences, no lists or markdown.",
-            "Never say you are an AI or a language model; you are " + name + ".",
+            "Never say you are an AI, Claude or a language model; you are " + name + ".",
+            action_prompt(persona, False),
         ]
     return "\n".join(line for line in lines if line)
+
+
+# ---- Actions: an allowlist the owner writes; the model can only ask ----
+
+ACTION_TAG = re.compile(r"\[action:([a-z_]+):([a-z0-9_-]+)\]", re.I)
+
+
+def allowed_actions(persona: dict) -> dict:
+    """personality.json `actions`: {"open_app": {"calculator": [["gnome-calculator"], ...]}}.
+
+    Each target lists candidate argv lists; the first installed one runs.
+    """
+    result = {}
+    for kind, targets in (persona.get("actions") or {}).items():
+        if not isinstance(targets, dict):
+            continue
+        clean = {}
+        for target, candidates in targets.items():
+            argvs = [list(map(str, c)) for c in candidates or [] if isinstance(c, list) and c]
+            if argvs:
+                clean[str(target).lower()] = argvs
+        if clean:
+            result[str(kind).lower()] = clean
+    return result
+
+
+def action_prompt(persona: dict, spanish: bool) -> str:
+    apps = sorted(allowed_actions(persona).get("open_app", {}))
+    if not apps:
+        return ""
+    names = ", ".join(apps)
+    if spanish:
+        return ("Puedes abrir SOLO estas apps del usuario si te lo pide: " + names + ". Para abrir una, "
+                "quéjate un poco (sin salir del personaje) y termina tu respuesta con la etiqueta exacta "
+                "[action:open_app:NOMBRE]. Nunca uses otra etiqueta ni otra app; si piden otra cosa, niégate.")
+    return ("You can open ONLY these apps if the user asks: " + names + ". To open one, stay in character and "
+            "end your reply with the exact tag [action:open_app:NAME]. Never use any other tag or app.")
+
+
+def resolve_action(persona: dict, kind: str, target: str):
+    """The fixed argv for an allowlisted action, or None."""
+    candidates = allowed_actions(persona).get(kind.lower(), {}).get(target.lower())
+    for argv in candidates or []:
+        if shutil.which(argv[0]):
+            return argv
+    return None
+
+
+def launch(argv: list) -> None:
+    """Starts an app with a fixed argv: no shell, detached from her."""
+    subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+class ActionFilter:
+    """Removes [action:...] tags from streamed text, even split across pieces."""
+
+    def __init__(self):
+        self.held = ""
+        self.actions = []
+
+    def feed(self, piece: str) -> str:
+        text = self.held + piece
+        self.held = ""
+        out = []
+        while text:
+            start = text.find("[")
+            if start < 0:
+                out.append(text)
+                break
+            out.append(text[:start])
+            rest = text[start:]
+            match = ACTION_TAG.match(rest)
+            if match:
+                self.actions.append((match.group(1).lower(), match.group(2).lower()))
+                text = rest[match.end():]
+            elif "]" not in rest and len(rest) < 48 and "[action:".startswith(rest[:8].lower()):
+                self.held = rest  # maybe a tag that is not complete yet
+                break
+            else:
+                out.append("[")
+                text = rest[1:]
+        return "".join(out)
+
+    def finish(self) -> str:
+        rest, self.held = self.held, ""
+        return rest
 
 
 def max_tokens(persona: dict) -> int:
@@ -351,7 +441,83 @@ class Scripted:
             time.sleep(delay)
 
 
-BACKENDS = {"ollama": ollama_stream, "gemini": gemini_stream}
+def claude_prompt(history: list, text: str, spanish: bool) -> str:
+    """The recent conversation plus the new message, as one plain-text prompt."""
+    you, me = ("Usuario", "Tú") if spanish else ("User", "You")
+    lines = []
+    if history:
+        lines.append("Conversación reciente:" if spanish else "Recent conversation:")
+        for message in history:
+            lines.append(f"{you if message['role'] == 'user' else me}: {message['content']}")
+        lines.append("")
+    lines.append(("Mensaje nuevo del usuario: " if spanish else "New message from the user: ") + text)
+    return "\n".join(lines)
+
+
+def claude_argv(chat: dict, system: str) -> list:
+    """`claude -p` with no tools, no MCP servers and none of the user's settings."""
+    cfg = chat.get("claude") or {}
+    return [
+        str(cfg.get("command", "claude")), "-p",
+        "--model", str(cfg.get("model", "haiku")),
+        "--system-prompt", system,
+        "--tools", "",                     # no built-in tools at all
+        "--restricted",                    # ignores user/project settings (hooks, permissions)
+        "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',  # no MCP servers
+        "--disable-slash-commands",
+        "--no-session-persistence",
+        "--output-format", "stream-json", "--include-partial-messages", "--verbose",
+    ]
+
+
+def claude_stream(chat: dict, system: str, history: list, text: str, tokens: int, spanish: bool = True):
+    """Replies through the local Claude Code CLI (the owner's plan), streaming."""
+    cfg = chat.get("claude") or {}
+    timeout = float(cfg.get("timeoutSec", 30))
+    argv = claude_argv(chat, system)
+    with tempfile.TemporaryDirectory(prefix="yorisou-claude-") as workdir:
+        try:
+            proc = subprocess.Popen(argv, cwd=workdir, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL, text=True, start_new_session=True)
+        except OSError as error:
+            raise BackendError(f"claude not available: {error}") from error
+        timer = threading.Timer(timeout, proc.kill)
+        timer.start()
+        got_text = False
+        try:
+            proc.stdin.write(claude_prompt(history, text, spanish))
+            proc.stdin.close()
+            for line in proc.stdout:
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                kind = event.get("type")
+                if kind == "stream_event":
+                    delta = (event.get("event") or {}).get("delta") or {}
+                    if delta.get("type") == "text_delta" and delta.get("text"):
+                        got_text = True
+                        yield delta["text"]
+                elif kind == "result":
+                    if event.get("is_error") or event.get("subtype") != "success":
+                        raise BackendError("claude: " + str(event.get("result") or event.get("subtype"))[:200])
+                    if not got_text and event.get("result"):
+                        got_text = True
+                        yield str(event["result"])
+            proc.wait()
+            if not timer.is_alive():
+                raise BackendError(f"claude: no reply in {timeout:.0f} s")
+            if not got_text:
+                raise BackendError(f"claude: exited with {proc.returncode} and no reply")
+        except OSError as error:
+            raise BackendError(f"claude: {error}") from error
+        finally:
+            timer.cancel()
+            if proc.poll() is None:
+                proc.kill()
+
+
+BACKENDS = {"ollama": ollama_stream, "gemini": gemini_stream, "claude-cli": claude_stream}
 
 
 # ---- Desktop events: apps opened/focused, notifications ----
@@ -658,6 +824,7 @@ class Brain:
         self.lock = threading.Lock()
         self.chat_id = 0
         self.scripted = Scripted(persona)
+        self.launcher = launch
 
     def persona_message(self) -> dict:
         p = self.persona
@@ -691,28 +858,65 @@ class Brain:
         self.emit({"t": "chat-start", "id": chat_id})
         name = self.chat_cfg.get("backend", "scripted")
         backend = self.backends.get(name)
+        # What to say when the model fails: her scripted lines (default for
+        # claude-cli) or one of her offlineLines.
+        fallback = self.chat_cfg.get("fallback", "scripted" if name == "claude-cli" else "offline")
+        tags = ActionFilter()
         reply = []
+
+        def send(piece: str) -> bool:
+            if chat_id != self.chat_id:  # a newer question replaced this one
+                return False
+            if piece:
+                reply.append(piece)
+                self.emit({"t": "chat-token", "id": chat_id, "text": piece})
+            return True
+
         try:
             if name == "scripted":
                 stream = self.scripted.stream(text)
             elif backend is None:
                 raise BackendError("unknown backend " + str(name))
             else:
-                stream = backend(self.chat_cfg, system_prompt(self.persona), self.memory.messages(),
-                                 text, max_tokens(self.persona))
+                args = (self.chat_cfg, system_prompt(self.persona), self.memory.messages(),
+                        text, max_tokens(self.persona))
+                stream = backend(*args, spanish=is_spanish(self.persona)) if name == "claude-cli" else backend(*args)
             for piece in stream:
-                if chat_id != self.chat_id:  # a newer question replaced this one
+                if not send(tags.feed(piece)):
                     return
-                reply.append(piece)
-                self.emit({"t": "chat-token", "id": chat_id, "text": piece})
+            if not send(tags.finish()):
+                return
         except BackendError as error:
             print(f"chibi-brain: chat failed: {error}", file=sys.stderr)
-            self.emit({"t": "chat-error", "id": chat_id, "text": self.offline_line()})
-            return
+            if reply:
+                pass  # keep what she already said
+            elif fallback == "scripted":
+                for piece in self.scripted.stream(text):
+                    if not send(piece):
+                        return
+            else:
+                self.emit({"t": "chat-error", "id": chat_id, "text": self.offline_line()})
+                return
+        for kind, target in tags.actions:
+            self.run_action(kind, target)
         answer = "".join(reply).strip()
         if answer:
             self.memory.add(text, answer)
         self.emit({"t": "chat-end", "id": chat_id})
+
+    def run_action(self, kind: str, target: str) -> bool:
+        """Runs an action the model asked for, only if the owner allowlisted it."""
+        argv = resolve_action(self.persona, kind, target)
+        if not argv:
+            print(f"chibi-brain: ignored action {kind}:{target} (not allowed or not installed)", file=sys.stderr)
+            return False
+        try:
+            self.launcher(argv)
+        except OSError as error:
+            print(f"chibi-brain: action {kind}:{target} failed: {error}", file=sys.stderr)
+            return False
+        self.emit({"t": "action", "kind": kind, "target": target})
+        return True
 
     def agent_event(self, payload: dict, pid=None) -> None:
         if pid:

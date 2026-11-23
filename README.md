@@ -22,8 +22,9 @@ She also has a personality and a voice:
 
 - **Click her to chat.** A small chat panel opens next to her and her replies
   stream into a speech bubble. By default she answers from her personality
-  file (keyword-matched, in character, no model and no network); a local
-  Ollama model or Gemini is optional. See [docs/chat.md](docs/chat.md).
+  file (keyword-matched, in character, no model and no network). She can also
+  talk through the `claude` CLI on your PC (your plan, no tools, an allowlist
+  of apps she may open), a local Ollama model or Gemini. See [docs/chat.md](docs/chat.md).
 - **She stays in her corner.** She sits, idles and naps in the bottom-right
   corner (`home` in `personality.json`, or `"roam"` to wander every screen)
   and only leaves it when you drag her or a reaction needs it.
@@ -183,8 +184,10 @@ no model, no network. Her name, tone, lines and corner live in
 `config/personality.json`; copy it to `~/.config/yorisou/personality.json`
 to make her yours.
 
-Optional real model: `ollama/setup.sh` (Ollama in Docker, 127.0.0.1 only)
-and `"backend": "ollama"` in `~/.config/yorisou/chat.json`, or Gemini.
+Optional real model: `"backend": "claude-cli"` in `~/.config/yorisou/chat.json`
+uses the `claude` CLI you are signed in to (your plan's quota; no tools, no
+MCP, only the apps you allowlist in `actions`). Or `ollama/setup.sh` (Ollama
+in Docker, 127.0.0.1 only) with `"backend": "ollama"`, or Gemini.
 Details and the model comparison: [docs/chat.md](docs/chat.md).
 
 ## Agent reactions
