@@ -152,5 +152,74 @@
     "Mmm, no sé mucho de eso, pero te escucho.",
     "¿De verdad? Cuéntame más.",
     "¡Jeje!"
-  ]
+  ],
+  "homePoses": {
+    "sit": 6,
+    "idle": 2.5,
+    "sleep": 1.5
+  },
+  "nagLines": [
+    "¿Me hiciste caso hoy? 🥺",
+    "Pss... sigo aquí.",
+    "¿Una pausa conmigo?"
+  ],
+  "nagAfterSec": 900,
+  "appReactions": {
+    "enabled": true,
+    "minIntervalSec": 20,
+    "focusDwellSec": 2,
+    "focusChance": 0.3,
+    "notifications": false,
+    "ignore": [
+      "quickshell"
+    ],
+    "apps": [
+      {
+        "name": "la calculadora",
+        "match": [
+          "calculator",
+          "qalculate",
+          "kcalc"
+        ],
+        "open": [
+          "¡Uh, matemáticas!"
+        ]
+      },
+      {
+        "name": "la terminal",
+        "match": [
+          "kitty",
+          "alacritty",
+          "ghostty",
+          "foot",
+          "terminal",
+          "wezterm"
+        ],
+        "open": [
+          "¡A teclear!"
+        ]
+      },
+      {
+        "name": "el navegador",
+        "match": [
+          "zen",
+          "firefox",
+          "chromium",
+          "chrome",
+          "brave"
+        ],
+        "open": [
+          "¿Qué vamos a buscar?"
+        ]
+      }
+    ],
+    "generic": {
+      "open": [
+        "¡Abriste {app}!"
+      ],
+      "notify": [
+        "¡Te llegó algo de {app}!"
+      ]
+    }
+  }
 }

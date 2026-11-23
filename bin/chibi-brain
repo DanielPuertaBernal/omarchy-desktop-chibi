@@ -35,6 +35,8 @@ import json
 import os
 import random
 import re
+import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -54,11 +56,15 @@ MAX_BODY = 1 << 20
 
 # ---- Config ----
 
+# Dicts that are a whole choice, not settings to merge key by key.
+REPLACED_KEYS = {"homePoses"}
+
+
 def merge(base: dict, override: dict) -> dict:
     """Recursive dict merge: values in `override` win, nested dicts merge."""
     result = dict(base)
     for key, value in override.items():
-        if isinstance(value, dict) and isinstance(result.get(key), dict):
+        if isinstance(value, dict) and isinstance(result.get(key), dict) and key not in REPLACED_KEYS:
             result[key] = merge(result[key], value)
         else:
             result[key] = value
@@ -318,6 +324,185 @@ class Scripted:
 BACKENDS = {"ollama": ollama_stream, "gemini": gemini_stream}
 
 
+# ---- Desktop events: apps opened/focused, notifications ----
+
+def pick_line(lines: list, last: str) -> str:
+    choices = [line for line in lines if line != last] or lines
+    return random.choice(choices)
+
+
+def app_label(cls: str) -> str:
+    """"org.gnome.Calculator" -> "Calculator", "zen" -> "Zen"."""
+    name = re.split(r"[.]", cls.strip())[-1] or cls
+    return name[:1].upper() + name[1:]
+
+
+class AppReactor:
+    """Turns desktop events into short in-character lines.
+
+    personality.json `appReactions`:
+      enabled, minIntervalSec (20), focusDwellSec (2), focusChance (0.5),
+      notifications (false), ignore [classes],
+      apps [{name, match: [class substrings], open, focus, notify: [lines]}],
+      generic {open, focus, notify}: used for apps not in `apps`.
+    `{app}` in a line is the app's name. Pure logic: callers pass the clock.
+    """
+
+    def __init__(self, persona: dict):
+        cfg = persona.get("appReactions") or {}
+        self.enabled = bool(cfg.get("enabled", True))
+        self.notifications = bool(cfg.get("notifications", False))
+        self.min_interval = float(cfg.get("minIntervalSec", 20))
+        self.dwell = float(cfg.get("focusDwellSec", 2))
+        self.focus_chance = float(cfg.get("focusChance", 0.5))
+        self.ignore = [normalize(x) for x in cfg.get("ignore", ["quickshell"])]
+        self.apps = [a for a in cfg.get("apps", []) if isinstance(a, dict)]
+        self.generic = cfg.get("generic") or {}
+        self.last_said = float("-inf")
+        self.last_line = ""
+        self.active = ""
+        self.pending = None
+        self.lock = threading.Lock()
+
+    def group_for(self, cls: str):
+        key = normalize(cls)
+        for group in self.apps:
+            if any(normalize(m) in key for m in group.get("match", []) if m):
+                return group
+        return None
+
+    def react(self, cls: str, kind: str, now: float):
+        if not self.enabled or not cls.strip():
+            return None
+        key = normalize(cls)
+        if any(ignored and ignored in key for ignored in self.ignore):
+            return None
+        if now - self.last_said < self.min_interval:
+            return None
+        group = self.group_for(cls)
+        lines = (group or {}).get(kind) or self.generic.get(kind) or []
+        if not lines:
+            return None
+        self.last_said = now
+        self.last_line = pick_line(lines, self.last_line)
+        name = (group or {}).get("name") or app_label(cls)
+        return self.last_line.replace("{app}", name)
+
+    def hypr_event(self, line: str, now: float):
+        """One socket2 line: "openwindow>>addr,ws,class,title" or "activewindow>>class,title"."""
+        name, _, data = line.strip().partition(">>")
+        with self.lock:
+            if name == "openwindow":
+                parts = data.split(",", 3)
+                if len(parts) < 3:
+                    return None
+                self.active = parts[2]
+                self.pending = None
+                return self.react(parts[2], "open", now)
+            if name == "activewindow":
+                cls = data.split(",", 1)[0]
+                if cls != self.active:
+                    self.active = cls
+                    # Wait: quick focus flips never get a line.
+                    self.pending = (cls, now) if cls else None
+            return None
+
+    def tick(self, now: float, roll: float = None):
+        """Call often: a focus that stayed put for `focusDwellSec` may get a line."""
+        with self.lock:
+            if not self.pending or now - self.pending[1] < self.dwell:
+                return None
+            cls = self.pending[0]
+            self.pending = None
+            if (random.random() if roll is None else roll) >= self.focus_chance:
+                return None
+            return self.react(cls, "focus", now)
+
+    def notification(self, app: str, now: float):
+        if not self.notifications:
+            return None
+        with self.lock:
+            return self.react(app or "notificación", "notify", now)
+
+
+class NotifyParser:
+    """Reads `dbus-monitor` output; returns the app name of each Notify call."""
+
+    def __init__(self):
+        self.in_notify = False
+
+    def feed(self, line: str):
+        if line.startswith("method call") and "member=Notify" in line:
+            self.in_notify = True
+            return None
+        if self.in_notify:
+            match = re.match(r'\s*string "(.*)"\s*$', line)
+            if match:
+                self.in_notify = False
+                return match.group(1)
+            if not line.startswith(" "):
+                self.in_notify = False
+        return None
+
+
+def die_with_parent() -> None:
+    """In a child process: get SIGTERM when chibi-brain dies."""
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
+    except (OSError, AttributeError):
+        pass
+
+
+def watch_hyprland(reactor: AppReactor, say) -> None:
+    """Listens to Hyprland's event socket; reconnects if Hyprland restarts."""
+    sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+    if not sig:
+        return
+    path = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "hypr" / sig / ".socket2.sock"
+    while True:
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                sock.connect(str(path))
+                sock.settimeout(0.5)
+                buffer = b""
+                while True:
+                    try:
+                        chunk = sock.recv(4096)
+                        if not chunk:
+                            break
+                        buffer += chunk
+                        *lines, buffer = buffer.split(b"\n")
+                        for raw in lines:
+                            say(reactor.hypr_event(raw.decode("utf-8", "replace"), time.monotonic()))
+                    except socket.timeout:
+                        pass
+                    say(reactor.tick(time.monotonic()))
+        except OSError:
+            pass
+        time.sleep(5)
+
+
+def watch_notifications(reactor: AppReactor, say) -> None:
+    """Passive listener (a D-Bus monitor): the notification daemon is untouched."""
+    rule = "type='method_call',interface='org.freedesktop.Notifications',member='Notify'"
+    try:
+        proc = subprocess.Popen(["dbus-monitor", "--session", rule], stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, text=True, preexec_fn=die_with_parent)
+    except OSError as error:
+        print(f"chibi-brain: notifications disabled: {error}", file=sys.stderr)
+        return
+    CHILDREN.append(proc)
+    parser = NotifyParser()
+    for line in proc.stdout:
+        app = parser.feed(line)
+        if app is not None:
+            say(reactor.notification(app, time.monotonic()))
+
+
+CHILDREN = []
+
+
 # ---- AI agent events -> reactions ----
 
 TOOL_WORDS = {
@@ -456,6 +641,9 @@ class Brain:
             "character": str(p.get("character", DEFAULT_CHARACTER)),
             "scale": float(p.get("scale", 0) or 0),
             "home": str(p.get("home", "bottom-right")),
+            "nagLines": list(p.get("nagLines", [])),
+            "homePoses": dict(p.get("homePoses") or {}),
+            "nagAfterSec": int(p.get("nagAfterSec", 600)),
         }
 
     def offline_line(self) -> str:
@@ -566,6 +754,17 @@ def main() -> int:
     brain = Brain(persona, chat, emit)
     emit(brain.persona_message())
 
+    reactor = AppReactor(persona)
+
+    def say(line) -> None:
+        if line:
+            emit({"t": "say", "text": line})
+
+    if reactor.enabled:
+        threading.Thread(target=watch_hyprland, args=(reactor, say), daemon=True).start()
+        if reactor.notifications:
+            threading.Thread(target=watch_notifications, args=(reactor, say), daemon=True).start()
+
     try:
         server = ThreadingHTTPServer(("127.0.0.1", int(chat.get("bridgePort", 47811))), make_handler(brain))
         threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -579,7 +778,9 @@ def main() -> int:
             continue
         if isinstance(message, dict):
             brain.command(message)
-    # The shell went away; take the process down with it.
+    # The shell went away; take the process (and its helpers) down with it.
+    for child in CHILDREN:
+        child.terminate()
     os._exit(0)
 
 

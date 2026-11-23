@@ -20,6 +20,9 @@ She also has a personality and a voice:
 - **She stays in her corner.** She sits, idles and naps in the bottom-right
   corner (`home` in `personality.json`, or `"roam"` to wander every screen)
   and only leaves it when you drag her or a reaction needs it.
+- **She notices what you do.** Open the calculator, a browser, a chat app or
+  a game and she has something to say about it (Hyprland events; per-app
+  lines, rate-limited, optional notification reactions).
 - **She reacts to your AI coding agent.** With the Claude Code hooks
   installed she thinks when you send a prompt, works on her laptop while
   tools run (the bubble says what: "Editando Service.qml"), waves when the

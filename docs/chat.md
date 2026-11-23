@@ -29,6 +29,52 @@ lines, never the same one twice in a row. Nothing matched: a line from
 A character folder's own `personality.json` can carry its own replies (see
 [sprites.md](sprites.md)).
 
+## Desktop reactions (apps and notifications)
+
+She comments when you open or focus an app (Hyprland's event socket,
+`openwindow` / `activewindow`) and, if you turn it on, when a desktop
+notification arrives. Configure it with `appReactions` in
+`personality.json`:
+
+```json
+"appReactions": {
+  "enabled": true,
+  "minIntervalSec": 20,     // at most one line every 20 s
+  "focusDwellSec": 2,       // a focused app must stay focused 2 s (quick flips are ignored)
+  "focusChance": 0.4,       // not every focus gets a line
+  "notifications": false,   // react to desktop notifications
+  "ignore": ["quickshell"], // window classes she never reacts to
+  "apps": [
+    { "name": "WhatsApp", "match": ["whatsapp"],
+      "open": ["¿Otra vez WhatsApp? Yo estoy aquí, ¿sabes?"],
+      "focus": ["WhatsApp otra vez..."],
+      "notify": ["¿Quién te escribe?"] }
+  ],
+  "generic": { "open": ["¿{app}? Bah."], "focus": [], "notify": ["Ding. {app}."] }
+}
+```
+
+- `match` is a case-insensitive substring of the window class
+  (`org.gnome.Calculator`, `zen`, `kitty`...); `hyprctl clients` shows them.
+  For notifications it matches the sending app's name.
+- Apps not in `apps` use `generic`; `{app}` becomes the app's `name` (or the
+  class, e.g. "Nautilus"). An empty list means no line.
+- She only speaks when free: not asleep, not chatting, not reacting to an agent.
+- Notifications are read with `dbus-monitor` (a passive D-Bus monitor): the
+  notification daemon is not replaced or touched, and only the app name is
+  used, never the text. Needs `dbus-monitor` (package `dbus`).
+
+## Where she rests
+
+`home` picks her corner. `homePoses` is what she does there, as animation
+name → weight, e.g. `{"sit": 6, "idle": 2.5, "sleep": 1.5}` (the default) or
+`{"work": 1}` to always sit with her laptop. It replaces the default, it is
+not merged with it. She still naps when you are away from the computer.
+
+`nagLines` replace her idle lines once you have not clicked or chatted with
+her for `nagAfterSec` seconds (default 600); idle chatter stays rate-limited by
+`idleChatterMinSec`.
+
 ## Optional: a real model
 
 Set `"backend": "ollama"` or `"gemini"` in `~/.config/danso-chibi/chat.json`.
@@ -94,7 +140,10 @@ plugin to apply.
 | `language` | reply language (`es` default) |
 | `tone`, `likes`, `backstory`, `catchphrases` | go into her system prompt |
 | `home` | her corner: `bottom-right` (default), `bottom-left`, `top-right`, `top-left`, or `roam` to wander every screen |
+| `homePoses` | what she does in her corner: animation → weight (see above) |
 | `replies`, `fallbackReplies` | scripted chat lines (see above) |
+| `nagLines`, `nagAfterSec` | lines when you ignore her for a while (see above) |
+| `appReactions` | lines when you open/focus apps or get notifications (see above) |
 | `maxReplyWords` | model reply length (bubble-sized; also caps the tokens) |
 | `idleLines` | things she says on her own (plus the catchphrases) |
 | `idleChatter`, `idleChatterMinSec` | turn idle lines off, or space them out (at most one every `idleChatterMinSec`–2× that) |

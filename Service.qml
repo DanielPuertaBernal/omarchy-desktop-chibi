@@ -111,6 +111,12 @@ Scope {
   // bottom-left, top-right, top-left) or "roam" to wander every screen.
   property string home: "bottom-right"
   readonly property bool homebody: home !== "roam" && home !== ""
+  property var homePoses: ({ sit: 6, idle: 2.5, sleep: 1.5 })
+  // Nagging: after `nagAfterSec` without a click or a chat, idle chatter
+  // uses `nagLines` instead of `idleLines`.
+  property var nagLines: []
+  property int nagAfterSec: 600
+  property real lastAttention: Date.now()
 
   // ---- State (global desktop coordinates of her anchor box) ----
   readonly property real w: boxW * sizeScale
@@ -249,11 +255,19 @@ Scope {
       moodTimer.restart()
       return
     }
-    const r = Math.random()
-    mode = r < 0.6 ? "sit" : r < 0.85 ? "idle" : "sleep"
+    // personality.json `homePoses`: animation name -> weight.
+    let total = 0
+    for (const k in homePoses) total += Math.max(0, Number(homePoses[k]) || 0)
+    let r = Math.random() * total
+    let pose = "sit"
+    for (const k in homePoses) {
+      r -= Math.max(0, Number(homePoses[k]) || 0)
+      if (r <= 0) { pose = k; break }
+    }
+    mode = pose
     moodTimer.interval = mode === "sleep" ? 30000 + Math.random() * 60000
-                       : mode === "sit" ? 20000 + Math.random() * 40000
-                       : 8000 + Math.random() * 10000
+                       : mode === "idle" ? 8000 + Math.random() * 10000
+                       : 20000 + Math.random() * 40000
     moodTimer.restart()
   }
 
@@ -387,7 +401,15 @@ Scope {
       if (userScale > 0) sizeScale = userScale
       if (message.character && message.character !== charDir) charDir = message.character
       if (message.home !== undefined) home = String(message.home)
+      if (message.homePoses && Object.keys(message.homePoses).length) homePoses = message.homePoses
+      nagLines = message.nagLines || []
+      nagAfterSec = Math.max(60, message.nagAfterSec || 600)
       chatterTimer.restartRandom()
+    } else if (message.t === "say") {
+      // A desktop event (app opened, notification): only when she is free.
+      if (present && !chatOpen && !busyHands && !sleepLocked && mode !== "sleep"
+          && agentState === "idle" && bubbleText === "")
+        say(String(message.text || ""), 5000)
     } else if (message.t === "chat-start") {
       chatId = message.id
       chatBusy = true
@@ -418,6 +440,7 @@ Scope {
   function sendChat(text) {
     text = text.trim()
     if (!text) return
+    lastAttention = Date.now()
     chatLog.append({ who: "me", text: text })
     trimLog()
     if (!brainSend({ t: "chat", text: text })) {
@@ -452,6 +475,7 @@ Scope {
   }
 
   function clicked() {
+    lastAttention = Date.now()
     // Like ThatPet: when an agent is waiting for you, a click takes you there.
     if (agentState === "needs" || agentState === "done") {
       brainSend({ t: "focus-agent" })
@@ -527,7 +551,8 @@ Scope {
   // An agent that stopped sending events (crashed, closed) is forgotten.
   Timer {
     id: agentStale
-    interval: 180000
+    // A stuck state (an agent that died, a test event) falls back to rest.
+    interval: 60000
     onTriggered: if (root.agentBusy && root.agentState !== "needs") {
       root.agentState = "idle"
       root.bubbleText = ""
@@ -917,8 +942,11 @@ Scope {
     running: false
     onTriggered: {
       const calm = root.mode === "idle" || root.mode === "sit" || root.mode === "walk" || root.mode === "dance"
-      if (root.idleChatter && root.present && calm && !root.chatOpen && root.bubbleText === "" && root.idleLines.length)
-        root.say(root.idleLines[Math.floor(Math.random() * root.idleLines.length)], 5000)
+                || (root.homebody && root.mode !== "sleep" && root.homePoses[root.mode] !== undefined)
+      const ignored = Date.now() - root.lastAttention > root.nagAfterSec * 1000
+      const lines = ignored && root.nagLines.length ? root.nagLines : root.idleLines
+      if (root.idleChatter && root.present && calm && !root.chatOpen && root.bubbleText === "" && lines.length)
+        root.say(lines[Math.floor(Math.random() * lines.length)], 5000)
       restartRandom()
     }
   }

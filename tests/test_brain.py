@@ -88,6 +88,17 @@ class CharacterTest(unittest.TestCase):
         self.assertEqual(persona["tone"], "perezosa")
         self.assertEqual(persona["likes"], ["el té"])  # untouched keys keep the defaults
 
+    def test_character_home_poses_replace_the_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            defaults, user = Path(tmp) / "defaults", Path(tmp) / "user"
+            defaults.mkdir()
+            (defaults / "personality.json").write_text(json.dumps(dict(PERSONA, homePoses={"sit": 6, "idle": 2})))
+            user.mkdir()
+            (user / "personality.json").write_text('{"character": "ellen"}')
+            self.make_char(user / "characters", "ellen", {"homePoses": {"work": 1}})
+            persona = brain.load_persona(defaults, user, root=Path(tmp) / "repo")
+        self.assertEqual(persona["homePoses"], {"work": 1})
+
     def test_repo_relative_and_missing_characters(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo, user = Path(tmp) / "repo", Path(tmp) / "user"
@@ -199,6 +210,87 @@ class ScriptedChatTest(unittest.TestCase):
 
     def test_persona_without_replies_still_answers(self):
         self.assertTrue(self.answer(self.ask("hola", PERSONA)))
+
+
+class AppReactorTest(unittest.TestCase):
+    CFG = {"appReactions": {
+        "minIntervalSec": 20, "focusDwellSec": 2, "focusChance": 1, "notifications": True,
+        "ignore": ["quickshell"],
+        "apps": [
+            {"name": "la calculadora", "match": ["calculator", "qalculate"],
+             "open": ["¿{app}? Yo cuento mejor."], "focus": ["Otra vez {app}."]},
+            {"name": "WhatsApp", "match": ["whatsapp"], "notify": ["¿Quién te escribe en {app}?"]},
+        ],
+        "generic": {"open": ["¿{app}? Bah."], "notify": ["Ding. {app}."]},
+    }}
+
+    def reactor(self, cfg=None):
+        return brain.AppReactor(cfg or self.CFG)
+
+    def test_open_matches_app_by_class(self):
+        r = self.reactor()
+        line = r.hypr_event("openwindow>>5a1,1,org.gnome.Calculator,Calculadora", 100.0)
+        self.assertEqual(line, "¿la calculadora? Yo cuento mejor.")
+
+    def test_unknown_app_uses_generic_with_its_name(self):
+        r = self.reactor()
+        self.assertEqual(r.hypr_event("openwindow>>5a1,1,org.gnome.Nautilus,Home", 0.0), "¿Nautilus? Bah.")
+
+    def test_rate_limited(self):
+        r = self.reactor()
+        self.assertIsNotNone(r.hypr_event("openwindow>>a,1,zen,x", 0.0))
+        self.assertIsNone(r.hypr_event("openwindow>>b,1,kitty,x", 10.0))
+        self.assertIsNotNone(r.hypr_event("openwindow>>c,1,kitty,x", 21.0))
+
+    def test_focus_waits_for_dwell_and_skips_flips(self):
+        r = self.reactor()
+        self.assertIsNone(r.hypr_event("activewindow>>qalculate-gtk,Qalculate!", 0.0))
+        self.assertIsNone(r.tick(1.0))  # not long enough yet
+        r.hypr_event("activewindow>>kitty,~", 1.5)  # flipped away: the calculator never gets a line
+        r.hypr_event("activewindow>>qalculate-gtk,Qalculate!", 1.8)
+        self.assertIsNone(r.tick(2.5))
+        self.assertEqual(r.tick(4.0), "Otra vez la calculadora.")
+        self.assertIsNone(r.tick(10.0))  # once per focus
+
+    def test_focus_chance_can_skip(self):
+        r2 = brain.AppReactor({"appReactions": dict(self.CFG["appReactions"], focusChance=0.5)})
+        r2.hypr_event("activewindow>>qalculate-gtk,x", 0.0)
+        self.assertIsNone(r2.tick(5.0, roll=0.9))
+        r2.hypr_event("activewindow>>kitty,x", 30.0)
+        r2.hypr_event("activewindow>>qalculate-gtk,x", 31.0)
+        self.assertEqual(r2.tick(40.0, roll=0.1), "Otra vez la calculadora.")
+
+    def test_ignored_classes_disabled_and_missing_lines(self):
+        self.assertIsNone(self.reactor().hypr_event("openwindow>>a,1,org.quickshell,x", 0.0))
+        off = brain.AppReactor({"appReactions": dict(self.CFG["appReactions"], enabled=False)})
+        self.assertIsNone(off.hypr_event("openwindow>>a,1,zen,x", 0.0))
+        self.assertIsNone(brain.AppReactor({}).hypr_event("openwindow>>a,1,zen,x", 0.0))  # no lines: silent
+        self.assertIsNone(self.reactor().hypr_event("garbage", 0.0))
+
+    def test_notifications(self):
+        r = self.reactor()
+        self.assertEqual(r.notification("WhatsApp", 0.0), "¿Quién te escribe en WhatsApp?")
+        self.assertEqual(r.notification("Thunderbird", 30.0), "Ding. Thunderbird.")
+        quiet = brain.AppReactor({"appReactions": dict(self.CFG["appReactions"], notifications=False)})
+        self.assertIsNone(quiet.notification("WhatsApp", 0.0))
+
+    def test_notify_parser_reads_dbus_monitor(self):
+        out = [
+            "signal time=1 sender=org.freedesktop.DBus -> destination=:1.9 member=NameAcquired",
+            '   string ":1.9"',
+            "method call time=2 sender=:1.3 -> destination=:1.16 serial=9 path=/org/freedesktop/Notifications;"
+            " interface=org.freedesktop.Notifications; member=Notify",
+            '   string "TestApp"',
+            "   uint32 0",
+            '   string "Hola resumen"',
+        ]
+        parser = brain.NotifyParser()
+        self.assertEqual([a for a in map(parser.feed, out) if a is not None], ["TestApp"])
+
+    def test_persona_message_carries_home_and_nag_settings(self):
+        persona = dict(PERSONA, homePoses={"work": 1}, nagLines=["¿Hola?"], nagAfterSec=300)
+        msg = brain.Brain(persona, {"backend": "scripted"}, lambda m: None).persona_message()
+        self.assertEqual((msg["homePoses"], msg["nagLines"], msg["nagAfterSec"]), ({"work": 1}, ["¿Hola?"], 300))
 
 
 class AgentTest(unittest.TestCase):
