@@ -1,11 +1,18 @@
-# Desktop chibi for Omarchy
+# Yorisou
+
+**Yorisou** (寄り添う, *yorisou*) is Japanese for "to stay close to someone,
+to keep them company". That is what she does: a desktop companion that sits
+in a corner of your screen, keeps you company while you work, chats with you
+and reacts to what you do. She runs on Linux (any Wayland compositor with
+layer-shell, with extras on Hyprland and an [Omarchy](https://omarchy.org)
+plugin) and on Windows.
 
 <p align="center">
   <img src="docs/poses.png" alt="All eight poses: idle, walk, run, dance, jump, sit, sleep and hang">
 </p>
 
-A little character that lives on your desktop. She roams across every
-screen on her own and picks what to do at random: walk, run, chase your
+She can also roam across every screen on her own and pick what to do at
+random (`"home": "roam"`): walk, run, chase your
 cursor, dance, sit, jump, climb a screen edge, peek from the bottom, idle or
 take a nap (and she naps when you leave the computer). Grab her with the
 mouse and she dangles from your cursor; let go and she drops back down, or
@@ -31,9 +38,9 @@ She also has a personality and a voice:
   [docs/agent-hooks.md](docs/agent-hooks.md).
 - Now and then she says something on her own (can be turned off).
 
-It is built with [Quickshell](https://quickshell.org) (QML). It runs as an
-[Omarchy](https://omarchy.org) plugin or standalone on any distro, and works
-with any character you want: swap the sprites and you have your own.
+It is built with [Quickshell](https://quickshell.org) (QML) on Linux and Qt
+Quick (PySide6) on Windows, and works with any character you want: swap the
+sprites and you have your own.
 
 Everything else stays click-through: only her own box takes mouse input
 (and the chat panel while it is open).
@@ -61,20 +68,20 @@ original **chibi** (`sprites/`). Pick one with `character` in
 ### Omarchy
 
 ```sh
-omarchy plugin add https://github.com/DanielPuertaBernal/omarchy-desktop-chibi.git --enable
+omarchy plugin add https://github.com/DanielPuertaBernal/yorisou.git --enable
 ```
 
-Optional: a `chibi` command to turn her on and off from the terminal:
+Optional: a `yorisou` command to turn her on and off from the terminal:
 
 ```sh
-ln -s ~/.config/omarchy/plugins/danso.chibi/bin/chibi ~/.local/bin/chibi
+ln -s ~/.config/omarchy/plugins/danso.yorisou/bin/yorisou ~/.local/bin/yorisou
 
-chibi          # toggle
-chibi on       # turn on
-chibi off      # turn off
-chibi status   # prints on / off
-chibi sleep    # nap until woken
-chibi wake     # roam again
+yorisou          # toggle
+yorisou on       # turn on
+yorisou off      # turn off
+yorisou status   # prints on / off
+yorisou sleep    # nap until woken
+yorisou wake     # wake up
 ```
 
 ### Any distro (standalone)
@@ -88,22 +95,22 @@ chibi wake     # roam again
    | Debian testing / unstable | `sudo apt install quickshell`                                 |
    | Others         | see the [Quickshell install guide](https://quickshell.org/docs/master/guide/install-setup) |
 
-2. Get the chibi and run her:
+2. Get Yorisou and run her:
 
    ```sh
-   git clone https://github.com/DanielPuertaBernal/omarchy-desktop-chibi.git ~/.local/share/desktop-chibi
-   quickshell -p ~/.local/share/desktop-chibi
+   git clone https://github.com/DanielPuertaBernal/yorisou.git ~/.local/share/yorisou
+   quickshell -p ~/.local/share/yorisou
    ```
 
 3. Start her with your session:
 
    - Hyprland (`~/.config/hypr/hyprland.conf`):
-     `exec-once = quickshell -p ~/.local/share/desktop-chibi`
+     `exec-once = quickshell -p ~/.local/share/yorisou`
    - Sway (`~/.config/sway/config`):
-     `exec quickshell -p ~/.local/share/desktop-chibi`
+     `exec quickshell -p ~/.local/share/yorisou`
    - KDE Plasma and others: add the same command in your autostart settings.
 
-To stop her: `pkill -f desktop-chibi`.
+To stop her: `pkill -f share/yorisou`.
 
 ### Windows
 
@@ -112,24 +119,24 @@ The `windows/` folder runs the same behaviour on Windows with Qt Quick
 only takes the mouse while the pointer is over her. A tray icon puts her to
 sleep, wakes her up or quits.
 
-Build a standalone `chibi.exe` (needs [Python](https://www.python.org/downloads/windows/) 3.10+):
+Build a standalone `yorisou.exe` (needs [Python](https://www.python.org/downloads/windows/) 3.10+):
 
 ```powershell
 cd windows
 .\build.ps1
-.\dist\chibi.exe
+.\dist\yorisou.exe
 ```
 
 Or run it without building: `pip install PySide6`, then `python chibi.py`.
 
-To start her with Windows, put a shortcut to `chibi.exe` in the Startup
+To start her with Windows, put a shortcut to `yorisou.exe` in the Startup
 folder (`Win + R`, then `shell:startup`).
 
-### One chibi across two PCs (Deskflow)
+### One companion across two PCs (Deskflow)
 
 If you share one mouse between a Linux and a Windows PC with
-[Deskflow](https://github.com/deskflow/deskflow), both copies can share a
-single chibi over the local network: now and then she walks off the shared
+[Deskflow](https://github.com/deskflow/deskflow), both copies can share
+her over the local network: now and then she walks off the shared
 edge and appears on the other PC, and you can carry her across.
 
 - **Carry her:** right-click her (no drag) and she hangs from the cursor; move
@@ -144,13 +151,13 @@ Configure each side with the other PC's address and where it sits, matching
 your Deskflow layout. The Linux side is the `primary` (it keeps her if both
 start at once).
 
-Linux, `~/.config/danso-chibi/link.json` (the Windows PC is on the left):
+Linux, `~/.config/yorisou/link.json` (the Windows PC is on the left):
 
 ```json
 { "peer": "192.168.1.20", "port": 47800, "side": "left", "primary": true }
 ```
 
-Windows, `link.json` next to `chibi.exe` (see `windows/link.example.json`):
+Windows, `link.json` next to `yorisou.exe` (see `windows/link.example.json`):
 
 ```json
 { "peer": "192.168.1.10", "port": 47800, "side": "right", "primary": false }
@@ -158,19 +165,26 @@ Windows, `link.json` next to `chibi.exe` (see `windows/link.example.json`):
 
 Allow UDP port 47800 between the two PCs: on Linux with ufw,
 `sudo ufw allow from <windows-ip> to any port 47800 proto udp`; on Windows,
-accept the firewall prompt the first time `chibi.exe` starts (private
+accept the firewall prompt the first time `yorisou.exe` starts (private
 networks).
+
+## Your settings
+
+Your own files live in `~/.config/yorisou/` (`personality.json`,
+`chat.json`, `link.json`, `characters/`). If you used this project under its
+former name, `~/.config/danso-chibi/` is copied there the first time she
+starts; the old folder is left untouched.
 
 ## Talk to her
 
 Click her, type, Enter. Esc closes the chat. She answers with lines from
 her personality (`replies` matched by keyword, `fallbackReplies` otherwise):
 no model, no network. Her name, tone, lines and corner live in
-`config/personality.json`; copy it to `~/.config/danso-chibi/personality.json`
+`config/personality.json`; copy it to `~/.config/yorisou/personality.json`
 to make her yours.
 
 Optional real model: `ollama/setup.sh` (Ollama in Docker, 127.0.0.1 only)
-and `"backend": "ollama"` in `~/.config/danso-chibi/chat.json`, or Gemini.
+and `"backend": "ollama"` in `~/.config/yorisou/chat.json`, or Gemini.
 Details and the model comparison: [docs/chat.md](docs/chat.md).
 
 ## Agent reactions
@@ -201,9 +215,9 @@ stays the same. The full animation set, sizes and fallbacks are in
 character with the original eight strips.
 
 Keep your own characters outside the repo, in
-`~/.config/danso-chibi/characters/<name>/` (strips, `sprites.json` and an
+`~/.config/yorisou/characters/<name>/` (strips, `sprites.json` and an
 optional `personality.json` with her own name and lines), then set
-`"character": "<name>"` in `~/.config/danso-chibi/personality.json`.
+`"character": "<name>"` in `~/.config/yorisou/personality.json`.
 Folders in the repo's `characters/` other than `kumo` are git-ignored.
 
 ### 1. Make the sprites
@@ -269,8 +283,8 @@ edit `manifest.json`:
 
 ```json
 {
-  "id": "yourname.chibi",
-  "name": "My desktop chibi",
+  "id": "yourname.companion",
+  "name": "My companion",
   "author": "yourname",
   "description": "..."
 }
@@ -281,12 +295,12 @@ The `id` must be unique; use the same name for the folder.
 ### 4. Try it
 
 ```sh
-cp -r my-chibi ~/.config/omarchy/plugins/yourname.chibi
-omarchy plugin validate ~/.config/omarchy/plugins/yourname.chibi
-omarchy plugin enable yourname.chibi
+cp -r my-companion ~/.config/omarchy/plugins/yourname.companion
+omarchy plugin validate ~/.config/omarchy/plugins/yourname.companion
+omarchy plugin enable yourname.companion
 ```
 
-Standalone (no Omarchy): `quickshell -p my-chibi`.
+Standalone (no Omarchy): `quickshell -p my-companion`.
 
 Publish your folder as a git repo and others can install your character with
 `omarchy plugin add <your-repo-url> --enable`. Pull requests that add new

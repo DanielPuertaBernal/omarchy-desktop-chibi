@@ -1,13 +1,13 @@
-# Local LLM for the chibi's chat. Start it with:
+# Optional local LLM for Yorisou's chat. Start it with:
 #   docker compose -f ollama/compose.yml up -d
 #   ollama/setup.sh            # pulls the chat model
 # The API listens on 127.0.0.1:11434 only (not reachable from the network).
-name: danso-chibi
+name: yorisou
 
 services:
   ollama:
     image: ollama/ollama:0.40.16
-    container_name: danso-chibi-ollama
+    container_name: yorisou-ollama
     restart: unless-stopped
     ports:
       - "127.0.0.1:11434:11434"
@@ -16,7 +16,7 @@ services:
     environment:
       # Unload the model after 10 minutes without chat to give the RAM back.
       OLLAMA_KEEP_ALIVE: "10m"
-      # One chat at a time is all the chibi needs.
+      # One chat at a time is all she needs.
       OLLAMA_NUM_PARALLEL: "1"
       OLLAMA_MAX_LOADED_MODELS: "1"
     # Optional NVIDIA GPU. Needs nvidia-container-toolkit on the host

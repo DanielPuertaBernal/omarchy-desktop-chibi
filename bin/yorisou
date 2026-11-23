@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Toggle the desktop chibi (Omarchy plugin danso.chibi).
-# Usage: chibi [on|off|toggle|status|sleep|wake]   (default: toggle)
-#   sleep  keep her asleep until `chibi wake`
+# Toggle Yorisou, the desktop pet (Omarchy plugin danso.yorisou).
+# Usage: yorisou [on|off|toggle|status|sleep|wake]   (default: toggle)
+#   sleep  keep her asleep until `yorisou wake`
 #   wake   let her roam again
 set -euo pipefail
 
-ID="danso.chibi"
-STATE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/danso-chibi/state"
+ID="danso.yorisou"
+STATE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/yorisou/state"
 
 # The plugin watches this file (see stateFile in Service.qml).
 set_state() {
@@ -30,7 +30,7 @@ case "${1:-toggle}" in
   sleep) set_state sleep ;;
   wake) set_state awake ;;
   *)
-    echo "Usage: chibi [on|off|toggle|status|sleep|wake]" >&2
+    echo "Usage: yorisou [on|off|toggle|status|sleep|wake]" >&2
     exit 1
     ;;
 esac
